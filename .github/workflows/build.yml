@@ -1,0 +1,68 @@
+name: Construir y publicar Memoria Naval
+
+# Cuándo se dispara:
+#   - Cuando subes cambios a la rama principal (commit/push de Excels o de código)
+#   - O manualmente desde la pestaña "Actions" del repositorio
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.xlsx'
+      - 'extract.py'
+      - 'template.html'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+# Permisos necesarios para que el workflow pueda publicar en GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Si hay un build en curso y llega otro push, cancelamos el viejo
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar los archivos del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Instalar dependencias (pandas, openpyxl)
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar el extractor
+        run: python extract.py
+
+      - name: Preparar carpeta de publicación
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+          # data.json e incidencias.txt se incluyen para poder consultarlos
+          [ -f data.json ] && cp data.json _site/data.json || true
+          [ -f incidencias.txt ] && cp incidencias.txt _site/incidencias.txt || true
+
+      - name: Subir el artefacto de la web
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

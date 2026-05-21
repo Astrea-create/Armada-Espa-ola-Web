@@ -1,0 +1,21 @@
+# Archivos generados automáticamente por extract.py — NO se versionan,
+# se reconstruyen en cada commit desde los Excels.
+index.html
+data.json
+incidencias.txt
+
+# Carpetas que crea GitHub Actions al publicar
+_site/
+
+# Basura típica de Excel y editores
+~$*.xlsx
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
