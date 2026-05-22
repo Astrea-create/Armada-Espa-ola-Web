@@ -329,7 +329,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "puerto_destino":    ("puerto_destino",   limpia),
         "id_lugar_destino":  ("id_lugar_destino", limpia),
         "fecha_arribada":    ("fecha_arribada",   fecha_iso),
-        "millas":            ("millas_recorridas", limpia),
+        "millas":            ("millas_recorridas", to_float),
     })
 
     # ── PASAJEROS (con campos 6.B: lugar de embarque y desembarque) ───────
@@ -543,11 +543,13 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
     })
 
     D["titulos"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Titulos honores"), {
-        "id":           ("id_titulo",     limpia),
-        "nombre":       ("nombre_titulo", limpia),
-        "tipo":         ("tipo",          limpia),
-        "institucion":  ("institucion",   limpia),
-        "rango":        ("rango",         limpia),
+        "id":              ("id_titulo",             limpia),
+        "nombre":          ("nombre_titulo",         limpia),
+        "nombre_entidad":  ("nombre_titulo_entidad", limpia),   # Marquesado, Condado, etc.
+        "fecha_creacion":  ("fecha_creacion",        fecha_iso),
+        "tipo":            ("tipo",                  limpia),
+        "institucion":     ("institucion",           limpia),
+        "rango":           ("rango",                 limpia),
     })
 
     D["profesiones"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Profesion"), {

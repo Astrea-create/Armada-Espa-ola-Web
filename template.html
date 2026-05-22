@@ -269,10 +269,40 @@
 
 <script>
 /* =========================================================================
-   APLICACIÓN — Buscador Armada XVIII, versión 3
+   APLICACIÓN — Memoria Naval, modelo v3
    Incorpora: rutas (travesías), pasajeros, biografía de personal,
-   panel de diagnóstico que detecta inconsistencias en los datos.
+   panel de diagnóstico (modo administrador) y detección de inconsistencias.
    ========================================================================= */
+
+// ── MODO ADMINISTRADOR ───────────────────────────────────────────────────
+// El panel de diagnóstico solo es útil para quien mantiene los datos. Para
+// mostrarlo, basta con visitar la web añadiendo ?admin a la URL. Una vez
+// hecho, queda recordado en este navegador (localStorage). Para desactivar,
+// visita la web con ?noadmin. Cualquier visitante normal (sin esos params
+// y sin la marca guardada) no ve el enlace ni puede entrar a #diagnostico.
+(function gestionaAdmin() {
+  try {
+    if (location.search.indexOf('admin') !== -1 &&
+        location.search.indexOf('noadmin') === -1) {
+      localStorage.setItem('mnv_admin', '1');
+    }
+    if (location.search.indexOf('noadmin') !== -1) {
+      localStorage.removeItem('mnv_admin');
+    }
+  } catch (e) { /* localStorage puede estar bloqueado en modo incógnito */ }
+})();
+function esAdmin() {
+  try { return localStorage.getItem('mnv_admin') === '1'; }
+  catch (e) { return false; }
+}
+
+// ── DEBOUNCE DEL BUSCADOR ─────────────────────────────────────────────────
+// Evita que cada tecla pulsada dispare una recarga inmediata.
+let _busqTimeout = null;
+function debounceBusqueda(fn, ms) {
+  clearTimeout(_busqTimeout);
+  _busqTimeout = setTimeout(fn, ms || 220);
+}
 
 const D = JSON.parse(document.getElementById('dataset').textContent);
 
@@ -962,18 +992,24 @@ function router() {
     case 'mapa':         return renderMapaGlobal();
     case 'quienes':      return renderQuienes();
     case 'contacto':     return renderContacto();
-    case 'diagnostico':  return renderDiagnostico();
+    case 'diagnostico':  return esAdmin() ? renderDiagnostico() : renderHome();
     default:             return renderHome();
   }
 }
 window.addEventListener('hashchange', router);
 window.addEventListener('DOMContentLoaded', () => {
-  // Pintar el contador de problemas en la nav
-  const probs = calculaDiagnostico();
-  const errores = probs.filter(p => p.nivel === 'error').length;
-  if (errores > 0) {
-    document.getElementById('nav-diag').innerHTML +=
-      ` <span class="alert">${errores}</span>`;
+  // El enlace "Diagnóstico" solo aparece en modo administrador.
+  // (visita ?admin para activarlo en este navegador, ?noadmin para quitarlo)
+  const navDiag = document.getElementById('nav-diag');
+  if (navDiag) {
+    if (esAdmin()) {
+      // Pintar contador de problemas si los hay
+      const probs = calculaDiagnostico();
+      const errores = probs.filter(p => p.nivel === 'error').length;
+      if (errores > 0) navDiag.innerHTML += ` <span class="alert">${errores}</span>`;
+    } else {
+      navDiag.style.display = 'none';
+    }
   }
   router();
 });
@@ -1030,7 +1066,9 @@ function renderHome() {
   `);
   document.getElementById('q-home').addEventListener('input', e => {
     const q = e.target.value.trim();
-    if (q.length >= 2) location.hash = '#buscar/' + encodeURIComponent(q);
+    debounceBusqueda(() => {
+      if (q.length >= 2) location.hash = '#buscar/' + encodeURIComponent(q);
+    });
   });
 }
 // Búsqueda
@@ -1100,17 +1138,34 @@ function renderSearch(query) {
   html += grupo('Títulos honoríficos', titulos, t => `
     <a class="card card-link" href="#titulo/${esc(t.id)}">
       <div class="card-title">${esc(t.nombre)}</div>
-      <div class="card-sub">${esc(t.tipo || '')}${t.institucion ? ' · ' + esc(t.institucion) : ''}</div>
+      <div class="card-sub">${esc(t.nombre_entidad || t.tipo || '')}${t.institucion ? ' · ' + esc(t.institucion) : ''}</div>
     </a>`);
 
   if (total === 0 && q) html += `<div class="empty">Sin resultados.</div>`;
 
+  // Antes de reemplazar el DOM, recordamos dónde tenía el cursor el usuario
+  // para que al re-renderizar pueda seguir escribiendo sin perder el foco.
+  let cursorPos = null;
+  const oldInput = document.getElementById('q');
+  if (oldInput && document.activeElement === oldInput) {
+    cursorPos = oldInput.selectionStart;
+  }
+
   setApp(html);
-  document.getElementById('q').addEventListener('input', e => {
-    const v = e.target.value.trim();
-    if (v.length >= 2) location.hash = '#buscar/' + encodeURIComponent(v);
-    else if (!v.length) location.hash = '#home';
-  });
+
+  const inp = document.getElementById('q');
+  if (inp) {
+    inp.focus();
+    const pos = cursorPos !== null ? cursorPos : (query ? query.length : 0);
+    try { inp.setSelectionRange(pos, pos); } catch (e) { /* algunos navegadores */ }
+    inp.addEventListener('input', e => {
+      const v = e.target.value.trim();
+      debounceBusqueda(() => {
+        if (v.length >= 2) location.hash = '#buscar/' + encodeURIComponent(v);
+        else if (!v.length) location.hash = '#home';
+      });
+    });
+  }
 }
 
 // Listados
@@ -1345,15 +1400,18 @@ function renderListado(tipo) {
   }
   else if (tipo === 'titulos') {
     html += `<h1>Títulos honoríficos (${D.titulos.length})</h1>`;
-    html += `<p style="color:#6a6a6a">Distinciones nobiliarias, órdenes militares y civiles concedidas al personal.</p>`;
-    html += `<table><thead><tr><th>ID</th><th>Título</th><th>Tipo</th><th>Institución</th><th>Concesiones</th></tr></thead><tbody>`;
+    html += `<p style="color:#6a6a6a">Distinciones nobiliarias, órdenes militares y civiles concedidas al personal.
+    El <em>título</em> identifica a quien lo ostenta (Marqués, Conde…); la <em>entidad</em> es el ente nobiliario que persiste a través de los sucesivos titulares (Marquesado, Condado…).</p>`;
+    html += `<table><thead><tr><th>ID</th><th>Título</th><th>Entidad</th><th>Rango</th><th>Institución</th><th>Creado en</th><th>Concesiones</th></tr></thead><tbody>`;
     D.titulos.forEach(t => {
       const concesiones = D.titulos_persona.filter(tp => tp.id_titulo === t.id).length;
       html += `<tr>
         <td><code>${esc(t.id)}</code></td>
         <td><a href="#titulo/${esc(t.id)}">${esc(t.nombre)}</a></td>
-        <td>${esc(t.tipo || '')}</td>
+        <td>${esc(t.nombre_entidad || '')}</td>
+        <td>${esc(t.rango || '')}</td>
         <td>${esc(t.institucion || '')}</td>
+        <td>${t.fecha_creacion ? esc(fechaCorta(t.fecha_creacion)) : '<span class="empty">—</span>'}</td>
         <td>${concesiones || '<span class="empty">—</span>'}</td>
       </tr>`;
     });
@@ -1438,12 +1496,13 @@ function renderPersona(id) {
   // Títulos honoríficos
   if (titulosP.length) {
     html += `<h2>Títulos y honores <span class="badge" style="background:#f0d9a6;color:#7a5a1f">${titulosP.length}</span></h2>`;
-    html += `<table><thead><tr><th>Título</th><th>Tipo</th><th>Institución</th><th>Concesión</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Título</th><th>Entidad</th><th>Rango</th><th>Institución</th><th>Concesión</th></tr></thead><tbody>`;
     titulosP.forEach(tp => {
       const t = CAT.titulo[tp.id_titulo];
       html += `<tr>
         <td>${linkTitulo(tp.id_titulo)}</td>
-        <td>${esc((t && t.tipo) || '')}</td>
+        <td>${esc((t && t.nombre_entidad) || '')}</td>
+        <td>${esc((t && t.rango) || (t && t.tipo) || '')}</td>
         <td>${esc((t && t.institucion) || '')}</td>
         <td>${tp.fecha_concesion ? esc(fechaCorta(tp.fecha_concesion)) : '<span class="empty">sin fecha</span>'}${tp.fecha_fin ? ' → ' + esc(fechaCorta(tp.fecha_fin)) : ''}</td>
       </tr>`;
@@ -1836,15 +1895,23 @@ function renderBuque(id) {
     html += `<div class="empty">Sin oficialidad documentada todavía.</div>`;
   }
 
-  html += `<h2>Rutas y travesías <span class="badge badge-route">${rutas.length}</span></h2>`;
+  // Suma de millas recorridas a lo largo de su vida (solo las rutas con dato)
+  const totalMillas = rutas.reduce((s, r) => s + (r.millas || 0), 0);
+  const rutasConMillas = rutas.filter(r => r.millas).length;
+  const resumenMillas = totalMillas > 0
+    ? ` <span class="badge badge-sea">${totalMillas.toLocaleString('es-ES')} millas${rutasConMillas < rutas.length ? ` <small style="font-weight:normal">(${rutasConMillas} de ${rutas.length} rutas)</small>` : ''}</span>`
+    : '';
+  html += `<h2>Rutas y travesías <span class="badge badge-route">${rutas.length}</span>${resumenMillas}</h2>`;
   if (rutas.length) {
     rutas.forEach(r => {
       const via = r._viaEscuadra ? CAT.escuadra[r._viaEscuadra] : null;
+      const millasTxt = r.millas ? ` · <strong>${r.millas.toLocaleString('es-ES')}</strong> millas` : '';
       html += `<a class="card card-link" href="#ruta/${esc(r.id)}">
         <div class="card-title">${esc(r.puerto_partida || '?')} → ${esc(r.puerto_destino || '?')}${via ? ` <span class="badge badge-sea">con la ${esc(via.nombre)}</span>` : ''}</div>
         <div class="card-sub">
           ${r.fecha_partida ? 'parte ' + fechaCorta(r.fecha_partida) : ''}
           ${r.fecha_arribada ? ' · arriba ' + fechaCorta(r.fecha_arribada) : ''}
+          ${millasTxt}
         </div>
       </a>`;
     });
@@ -2381,7 +2448,7 @@ function renderRuta(id) {
         const com = oficialesBuqueUnico.find(o => o.id_funcion_buque === 'FBQ001');
         return com ? `<span>Al mando: <strong>${linkPersona(com.id_persona)}</strong></span>` : '';
       })() : ''}
-      ${r.millas ? `<span>Millas: <strong>${esc(r.millas)}</strong></span>` : ''}
+      ${r.millas ? `<span>Millas: <strong>${r.millas.toLocaleString('es-ES')}</strong></span>` : ''}
     </div>
   </div>`;
 
@@ -2691,17 +2758,22 @@ function renderTitulo(id) {
   let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
     <a href="#listado/titulos">Títulos</a> › ${esc(t.nombre)}</p>`;
 
+  // Cabecera: dignidad (Marqués de X) como título principal, y debajo
+  // la entidad nobiliaria (Marquesado de X) que es la que persiste a
+  // través de los titulares sucesivos.
   html += `<div class="detail-head">
     <span class="kind">Título honorífico · ${esc(t.id)}</span>
     <h1>${esc(t.nombre)}</h1>
+    ${t.nombre_entidad ? `<div style="margin:-4px 0 10px 0;color:#5a4a30;font-style:italic">Entidad: ${esc(t.nombre_entidad)}</div>` : ''}
     <div class="meta-row">
-      ${t.tipo ? `<span><strong>${esc(t.tipo)}</strong></span>` : ''}
+      ${t.rango ? `<span><strong>${esc(t.rango)}</strong></span>` : ''}
       ${t.institucion ? `<span>${esc(t.institucion)}</span>` : ''}
-      ${t.rango ? `<span>Rango: ${esc(t.rango)}</span>` : ''}
+      ${t.fecha_creacion ? `<span>Creado en ${esc(fechaCorta(t.fecha_creacion))}</span>` : ''}
+      ${t.tipo ? `<span>${esc(t.tipo)}</span>` : ''}
     </div>
   </div>`;
 
-  html += `<h2>Personas que lo han recibido (${concesiones.length})</h2>`;
+  html += `<h2>Personas que lo han ostentado <span class="badge">${concesiones.length}</span></h2>`;
   if (concesiones.length) {
     html += `<table><thead><tr><th>Persona</th><th>Fecha de concesión</th><th>Fin</th></tr></thead><tbody>`;
     concesiones.forEach(tp => {
