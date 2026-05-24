@@ -201,17 +201,21 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "imagen":                ("imagen",               limpia),
     })
 
-    # ── Auto-detección de retratos en assets/retratos/ ─────────────────────
+    # ── Auto-detección de retratos ─────────────────────────────────────────
     # Cualquier archivo cuyo nombre coincida con un id_persona (PER00xxx.png,
     # .jpg, .jpeg, .webp) se asocia automáticamente sin tener que rellenar
     # el campo "imagen" en el Excel. Si el Excel ya trae una imagen, esa
     # tiene prioridad.
-    carpeta_retratos = Path("assets/retratos")
+    # Buscamos en dos posibles ubicaciones para tolerar ambas convenciones:
+    #   - retratos/             (recomendada, junto a los Excels)
+    #   - assets/retratos/      (legado, por si ya estaba ahí)
     retratos_detectados: Dict[str, str] = {}
-    if carpeta_retratos.exists():
+    for carpeta in (Path("retratos"), Path("assets/retratos")):
+        if not carpeta.exists(): continue
         for ext in ("png", "jpg", "jpeg", "webp", "PNG", "JPG", "JPEG", "WEBP"):
-            for img in carpeta_retratos.glob(f"*.{ext}"):
-                retratos_detectados[img.stem] = f"assets/retratos/{img.name}"
+            for img in carpeta.glob(f"*.{ext}"):
+                # No sobrescribir si ya se detectó en una carpeta anterior
+                retratos_detectados.setdefault(img.stem, f"{carpeta.as_posix()}/{img.name}")
     for p in D["personal"]:
         if not p.get("imagen") and p["id"] in retratos_detectados:
             p["imagen"] = retratos_detectados[p["id"]]
