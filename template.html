@@ -162,6 +162,66 @@
   .bio-line { font-size: 14px; color: #4a4a4a; margin-top: 4px; }
   .bio-line strong { color: #1a1a1a; font-weight: 500; }
 
+  /* Marco de retrato — evoca un cuadro colgado en una galería del XVIII.
+     Doble línea dorada, margen interior de pergamino, sombra suave, y
+     una placa al pie con el nombre como en los museos. */
+  .retrato-oficial {
+    float: right;
+    width: 230px;
+    margin: 4px 0 16px 26px;
+    padding: 10px 10px 0 10px;
+    background: linear-gradient(180deg, #f7f1e0 0%, #ece2c8 100%);
+    border: 1px solid #8a6f3f;
+    box-shadow:
+      inset 0 0 0 4px #fff,
+      inset 0 0 0 5px #c9aa6a,
+      0 8px 22px rgba(35, 25, 10, 0.28),
+      0 1px 2px rgba(0,0,0,0.15);
+    border-radius: 2px;
+    position: relative;
+  }
+  .retrato-oficial img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 1px;
+    /* sutil viñeta para que la imagen se integre con el marco */
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.35);
+  }
+  .retrato-oficial .placa {
+    margin: 8px -10px 0;
+    padding: 8px 10px 10px;
+    background: linear-gradient(180deg, #2a2620 0%, #1a1612 100%);
+    color: #e8d9b0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11.5px;
+    line-height: 1.35;
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-top: 1px solid #c9aa6a;
+  }
+  .retrato-oficial .placa .nombre {
+    display: block;
+    color: #f0e0b0;
+    font-weight: 600;
+    margin-bottom: 1px;
+  }
+  .retrato-oficial .placa .ref {
+    display: block;
+    color: #a89868;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+    margin-top: 3px;
+  }
+  @media (max-width: 640px) {
+    .retrato-oficial {
+      float: none;
+      margin: 0 auto 20px;
+      max-width: 240px;
+    }
+  }
+
   .badge {
     display: inline-block; font-size: 12px; padding: 3px 9px;
     background: #f0eadf; color: #5a4f36; border-radius: 999px; font-weight: 500;
@@ -326,6 +386,7 @@ const CAT = {
   mercanciaCaudal: indexBy(D.mercancias_caudales, 'id'),
   enfermedad:      indexBy(D.enfermedades, 'id'),
   realesEjercitos: indexBy(D.reales_ejercitos, 'id'),
+  causa:           indexBy(D.causas_defuncion, 'id'),
 };
 
 function indexBy(arr, key) {
@@ -474,6 +535,15 @@ function rangoCubre(ini, fin, fecha) {
   return true;
 }
 
+// ¿Se solapan dos rangos cerrados? Cualquier null significa "abierto":
+// aIni=null → "desde siempre"; aFin=null → "hasta hoy/siempre". Útil cuando
+// un destino o pertenencia no tiene fecha de cese registrada.
+function rangosSeSolapan(aIni, aFin, bIni, bFin) {
+  if (aIni && bFin && aIni > bFin) return false;
+  if (bIni && aFin && bIni > aFin) return false;
+  return true;
+}
+
 // Resuelve la escuadra de una posición por DOS caminos:
 //  1) Explícito: la fila de posición trae id_escuadra.
 //  2) Inferido: el buque pertenecía a una escuadra en esa fecha.
@@ -483,6 +553,20 @@ function escuadraDePosicion(p) {
     (rangoCubre(pe.fecha_alta, pe.fecha_baja, p.fecha) ||
      (!pe.fecha_alta && !pe.fecha_baja)));
   return per ? per.id_escuadra : null;
+}
+
+// ¿Estaba este buque dado de alta en esta escuadra en esta fecha?
+// Cubre el caso de un buque que se incorpora, deja la formación por avería
+// y eventualmente vuelve (varias pertenencias consecutivas a la misma
+// escuadra); cualquiera de las pertenencias que incluya la fecha vale.
+function buqueActivoEnEscuadra(idBuque, idEscuadra, fecha) {
+  if (!idBuque || !idEscuadra) return false;
+  return D.pertenencias.some(pe => {
+    if (pe.id_buque !== idBuque || pe.id_escuadra !== idEscuadra) return false;
+    if (!fecha) return !pe.fecha_alta && !pe.fecha_baja;
+    return rangoCubre(pe.fecha_alta, pe.fecha_baja, fecha) ||
+           (!pe.fecha_alta && !pe.fecha_baja);
+  });
 }
 
 /**
@@ -766,6 +850,15 @@ function linkRuta(id) {
   const txt = `${esc(r.puerto_partida || '?')} → ${esc(r.puerto_destino || '?')}`;
   return `<a href="#ruta/${esc(id)}">${txt}</a>`;
 }
+// linkCausa: si el valor no es un ID válido (texto crudo en lugar de CAUDEFxxx)
+// lo mostramos en texto plano para no perder dato pero sin enlazar.
+function linkCausa(id) {
+  if (!id) return '';
+  const c = CAT.causa[id];
+  if (c) return `<a href="#causa/${esc(id)}">${esc(c.nombre)}</a>`;
+  // Fallback: el campo trae texto en lugar del id_causa_defuncion
+  return `<span title="Valor no encontrado en el catálogo de causas — debería ser un ID tipo CAUDEFxxx">${esc(id)}</span>`;
+}
 const linkTitulo   = id => link(CAT.titulo,  id, 'titulo');
 const linkMercancia= id => link(CAT.mercancia, id, 'mercancia');
 const linkProfesion= id => link(CAT.profesion, id, 'profesion');
@@ -989,6 +1082,7 @@ function router() {
     case 'infraestructura': return renderInfraestructura(parts[1]);
     case 'escuadra':     return renderEscuadra(parts[1]);
     case 'batalla':      return renderBatalla(parts[1]);
+    case 'causa':        return renderCausa(parts[1]);
     case 'mapa':         return renderMapaGlobal();
     case 'quienes':      return renderQuienes();
     case 'contacto':     return renderContacto();
@@ -1054,7 +1148,8 @@ function renderHome() {
         También: <a href="#listado/grados">escalafón</a> ·
         <a href="#listado/funcionesBuque">funciones a bordo</a> ·
         <a href="#listado/mercancias">mercancías</a> ·
-        <a href="#listado/titulos">títulos y honores</a>
+        <a href="#listado/titulos">títulos y honores</a> ·
+        <a href="#listado/causas">causas de defunción</a>
       </p>
       <p class="explora-sugeridos">
         Para empezar: <a href="#persona/PER00092">Juan Langara Huarte</a> ·
@@ -1417,10 +1512,30 @@ function renderListado(tipo) {
     });
     html += `</tbody></table>`;
   }
+  else if (tipo === 'causas') {
+    html += `<h1>Causas de defunción (${D.causas_defuncion.length})</h1>`;
+    html += `<p style="color:#6a6a6a">De qué fallecieron los hombres de la Armada: combate, naufragio, enfermedad, vejez… Cruza la información que ya hay en la hoja PERSONAL con un catálogo común.</p>`;
+    // Agrupar por tipo para que sea más legible
+    const colorTipo = {
+      'Combate':    '#e8c4c4', 'Accidente':  '#f0d9a6',
+      'Enfermedad': '#cfd9e3', 'Natural':    '#d8e7d8',
+      'Violenta':   '#e8c4c4',
+    };
+    html += `<table><thead><tr><th>ID</th><th>Causa</th><th>Tipo</th><th>Defunciones documentadas</th></tr></thead><tbody>`;
+    D.causas_defuncion.forEach(c => {
+      const n = D.personal.filter(p => p.id_causa_defuncion === c.id).length;
+      const bg = colorTipo[c.tipo] || '#eee';
+      html += `<tr>
+        <td><code>${esc(c.id)}</code></td>
+        <td><a href="#causa/${esc(c.id)}">${esc(c.nombre)}</a></td>
+        <td>${c.tipo ? `<span class="badge" style="background:${bg};color:#5a3030">${esc(c.tipo)}</span>` : '<span class="empty">—</span>'}</td>
+        <td>${n || '<span class="empty">—</span>'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
   setApp(html);
 }
-
-// Ficha PERSONA — ahora con datos biográficos
 function renderPersona(id) {
   const p = CAT.persona[id];
   if (!p) { setApp(`<p class="empty">Persona ${esc(id)} no encontrada.</p>`); return; }
@@ -1449,8 +1564,18 @@ function renderPersona(id) {
   let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
     <a href="#listado/personal">Personal</a> › ${esc(p.nombre)}</p>`;
 
-  html += `<div class="detail-head">
-    <span class="kind">Persona · ${esc(p.id)}</span>
+  html += `<div class="detail-head">`;
+  // Retrato (si lo hay) — flota a la derecha para que el texto fluya alrededor
+  if (p.imagen) {
+    html += `<figure class="retrato-oficial">
+      <img src="${esc(p.imagen)}" alt="Retrato de ${esc(p.nombre)}" loading="lazy">
+      <figcaption class="placa">
+        <span class="nombre">${esc(p.nombre)}</span>
+        <span class="ref">${esc(p.id)}</span>
+      </figcaption>
+    </figure>`;
+  }
+  html += `<span class="kind">Persona · ${esc(p.id)}</span>
     <h1>${esc(p.nombre)}</h1>`;
 
   // Profesión civil (si tiene)
@@ -1478,20 +1603,21 @@ function renderPersona(id) {
       ${p.id_lugar_nacimiento ? ' · ' + linkLugar(p.id_lugar_nacimiento) : ''}
     </div>`;
   }
-  if (p.fecha_defuncion || p.id_lugar_defuncion || p.id_batalla_defuncion) {
+  if (p.fecha_defuncion || p.id_lugar_defuncion || p.id_batalla_defuncion || p.id_causa_defuncion) {
     const batMuerte = p.id_batalla_defuncion ? CAT.batalla[p.id_batalla_defuncion] : null;
     html += `<div class="bio-line">
       <strong>Defunción:</strong>
       ${p.fecha_defuncion ? fechaCorta(p.fecha_defuncion) : 'fecha desconocida'}
       ${p.id_lugar_defuncion ? ' · ' + linkLugar(p.id_lugar_defuncion) : ''}
       ${batMuerte ? ' · <span style="color:#a32d2d;font-weight:600">caído en combate</span> en ' + linkBatalla(p.id_batalla_defuncion) : ''}
+      ${p.id_causa_defuncion ? ' · causa: ' + linkCausa(p.id_causa_defuncion) : ''}
     </div>`;
   }
 
   html += `<div class="meta-row">
     ${gradoMax ? `<span>Grado más alto: <strong>${linkGrado(gradoMax.id)}</strong></span>` : ''}
     <span>${destMar.length} mar · ${destTie.length} tierra · ${ascensos.length} ascensos · ${rutasPas.length} como pasajero${titulosP.length ? ' · ' + titulosP.length + ' título' + (titulosP.length === 1 ? '' : 's') : ''}</span>
-  </div></div>`;
+  </div><div style="clear:both"></div></div>`;
 
   // Títulos honoríficos
   if (titulosP.length) {
@@ -1779,6 +1905,96 @@ function renderPersona(id) {
       </tr>`;
     });
     html += `</tbody></table>`;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Rutas en las que participó la persona
+  // Cruza tres tablas de roles con las rutas correspondientes:
+  //   1) destinos_mar  → rutas del buque del destino (propias + de escuadras
+  //                      donde el buque pertenecía durante el destino).
+  //   2) mandos_escuadra → rutas de esa escuadra durante el periodo de mando.
+  //   3) plana_mayor_escuadra → rutas de esa escuadra durante el periodo.
+  // El periodo del rol se intersecta con el periodo de la ruta usando
+  // rangosSeSolapan (los nulls se tratan como "abierto").
+  // ──────────────────────────────────────────────────────────────────────
+  const rutasParticipa = [];   // {ruta, rol, contexto, idDestino, _ord}
+  const yaIncluida = new Set(); // dedupe por id_ruta + rol + contexto
+
+  function pushRuta(r, rol, contexto, ord) {
+    if (!r || !r.id) return;
+    const k = `${r.id}|${rol}|${contexto || ''}`;
+    if (yaIncluida.has(k)) return;
+    yaIncluida.add(k);
+    rutasParticipa.push({ ruta: r, rol, contexto, _ord: ord || r.fecha_partida || '' });
+  }
+
+  destMar.forEach(d => {
+    if (!d.id_buque) return;
+    const ceseEff = d.fecha_cese || d.fecha_cese_implicita || null;
+    // (a) Rutas propias del buque
+    D.rutas.forEach(r => {
+      if (r.id_buque !== d.id_buque) return;
+      if (rangosSeSolapan(d.fecha_inicio, ceseEff, r.fecha_partida, r.fecha_arribada)) {
+        const rolNombre = d.id_funcion_buque ? nombreFuncion(d.id_funcion_buque) : 'oficial embarcado';
+        pushRuta(r, rolNombre, `a bordo de ${linkBuque(d.id_buque)}`);
+      }
+    });
+    // (b) Rutas de escuadras a las que el buque pertenecía durante el destino
+    D.pertenencias.forEach(pe => {
+      if (pe.id_buque !== d.id_buque || !pe.id_escuadra) return;
+      if (!rangosSeSolapan(d.fecha_inicio, ceseEff, pe.fecha_alta, pe.fecha_baja)) return;
+      // Intersección destino × pertenencia
+      const ini = [d.fecha_inicio, pe.fecha_alta].filter(Boolean).sort().slice(-1)[0] || null;
+      const fin = [ceseEff, pe.fecha_baja].filter(Boolean).sort()[0] || null;
+      D.rutas.forEach(r => {
+        if (r.id_escuadra !== pe.id_escuadra || r.id_buque) return; // ruta pura de escuadra
+        if (rangosSeSolapan(ini, fin, r.fecha_partida, r.fecha_arribada)) {
+          const e = CAT.escuadra[pe.id_escuadra];
+          const rolNombre = d.id_funcion_buque ? nombreFuncion(d.id_funcion_buque) : 'oficial embarcado';
+          pushRuta(r, rolNombre,
+            `a bordo de ${linkBuque(d.id_buque)} con la ${linkEscuadra(pe.id_escuadra)}`);
+        }
+      });
+    });
+  });
+
+  mandosEsc.forEach(m => {
+    const ceseEff = m.fecha_cese || m.fecha_cese_implicita || null;
+    D.rutas.forEach(r => {
+      if (r.id_escuadra !== m.id_escuadra) return;
+      if (rangosSeSolapan(m.fecha_inicio, ceseEff, r.fecha_partida, r.fecha_arribada)) {
+        pushRuta(r, 'comandante general', `al mando de la ${linkEscuadra(m.id_escuadra)}`);
+      }
+    });
+  });
+
+  planaEsc.forEach(m => {
+    const ceseEff = m.fecha_cese || m.fecha_cese_implicita || null;
+    const rolNombre = m.id_funcion_buque ? nombreFuncion(m.id_funcion_buque) : 'plana mayor de escuadra';
+    D.rutas.forEach(r => {
+      if (r.id_escuadra !== m.id_escuadra) return;
+      if (rangosSeSolapan(m.fecha_inicio, ceseEff, r.fecha_partida, r.fecha_arribada)) {
+        pushRuta(r, rolNombre, `en plana mayor de la ${linkEscuadra(m.id_escuadra)}`);
+      }
+    });
+  });
+
+  // Orden cronológico
+  rutasParticipa.sort((a, b) => (a._ord || '').localeCompare(b._ord || ''));
+
+  if (rutasParticipa.length) {
+    html += `<h2>Rutas en las que participó <span class="badge badge-route">${rutasParticipa.length}</span></h2>`;
+    rutasParticipa.forEach(rp => {
+      const r = rp.ruta;
+      html += `<a class="card card-link" href="#ruta/${esc(r.id)}">
+        <div class="card-title">${esc(r.puerto_partida || '?')} → ${esc(r.puerto_destino || '?')}</div>
+        <div class="card-sub">
+          <span class="badge">${esc(rp.rol)}</span> ${rp.contexto || ''}
+          ${r.fecha_partida ? ' · ' + fechaCorta(r.fecha_partida) : ''}
+          ${r.fecha_arribada ? ' → ' + fechaCorta(r.fecha_arribada) : ''}
+        </div>
+      </a>`;
+    });
   }
 
   // Viajes como pasajero
@@ -2466,7 +2682,10 @@ function renderRuta(id) {
   }
   // Posiciones de esta ruta. Prioridad al id_ruta explícito; si una posición
   // declara su ruta, manda. Como respaldo (posiciones sin id_ruta) se infiere
-  // por buque/escuadra participante y fechas, como antes.
+  // por buque/escuadra participante Y, si la ruta es de escuadra, comprobando
+  // que el buque seguía dado de alta en esa fecha concreta (no basta con que
+  // perteneciera en algún momento — si se separó por avería, sus posiciones
+  // posteriores no deben aparecer aquí).
   const hayExplicitas = D.posiciones.some(p => p.id_ruta === r.id);
   const posIntermedias = D.posiciones
     .filter(p => {
@@ -2476,21 +2695,31 @@ function renderRuta(id) {
       // Si la posición declara OTRA ruta, nunca entra aquí
       if (p.id_ruta && p.id_ruta !== r.id) return false;
       // Respaldo por inferencia (solo posiciones sin id_ruta)
-      const participa = buquesParticipantes.includes(p.id_buque)
-        || (r.id_escuadra && p.id_escuadra === r.id_escuadra);
+      let participa;
+      if (r.id_buque) {
+        // Ruta de un solo buque: solo posiciones de ese buque
+        participa = (p.id_buque === r.id_buque);
+      } else if (r.id_escuadra) {
+        // Ruta de escuadra: posición de escuadra pura, O posición de un buque
+        // que en esa fecha seguía activo en la escuadra.
+        participa = (p.id_escuadra === r.id_escuadra)
+                 || buqueActivoEnEscuadra(p.id_buque, r.id_escuadra, p.fecha);
+      } else {
+        participa = false;
+      }
       return participa && rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha);
     })
     .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
   // Agrupar por formación: el popup encabeza con el buque insignia y
   // lista debajo las demás naves que iban en ese mismo punto.
-  // En el contexto de la ficha de una ruta de escuadra, el enlace "Ver"
-  // debe llevar a la ficha de la escuadra (no a la ruta en la que ya estás).
+  // El enlace principal lleva a la ficha de posición (qué pasaba ese día);
+  // si la ruta es de escuadra, añadimos un enlace secundario a la escuadra.
   agrupaPosicionesPorFormacion(posIntermedias).forEach(pt => {
     pt.size = pt._esFormacion ? 6 : 5;
     if (r.id_escuadra && pt.popup) {
-      pt.popup = pt.popup.replace(
-        /<br><a href="[^"]*">Ver →<\/a>/,
-        `<br><a href="#escuadra/${encodeURIComponent(r.id_escuadra)}">Ver escuadra →</a>`);
+      // Conservamos el "Ver →" original (que va a #posicion/...) y añadimos
+      // debajo el enlace secundario a la escuadra.
+      pt.popup += `<br><a href="#escuadra/${encodeURIComponent(r.id_escuadra)}" style="color:#6a6a6a">Ver escuadra →</a>`;
     }
     puntosMapa.push(pt);
   });
@@ -2791,6 +3020,57 @@ function renderTitulo(id) {
   setApp(html);
 }
 
+// Ficha CAUSA DE DEFUNCIÓN — agrupa todas las personas fallecidas por la
+// misma causa, con sus fechas y lugares de defunción.
+function renderCausa(id) {
+  const c = CAT.causa[id];
+  if (!c) { setApp(`<p class="empty">Causa ${esc(id)} no encontrada.</p>`); return; }
+
+  // Personas con esta causa de defunción
+  const personas = sortByDate(
+    D.personal.filter(p => p.id_causa_defuncion === id),
+    'fecha_defuncion');
+
+  // Color del tipo (para coherencia visual)
+  const colorTipo = {
+    'Combate':    '#e8c4c4',
+    'Accidente':  '#f0d9a6',
+    'Enfermedad': '#cfd9e3',
+    'Natural':    '#d8e7d8',
+    'Violenta':   '#e8c4c4',
+  }[c.tipo] || '#eee';
+
+  let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
+    <a href="#listado/causas">Causas de defunción</a> › ${esc(c.nombre)}</p>`;
+
+  html += `<div class="detail-head">
+    <span class="kind">Causa de defunción · ${esc(c.id)}</span>
+    <h1>${esc(c.nombre)}</h1>
+    <div class="meta-row">
+      ${c.tipo ? `<span class="badge" style="background:${colorTipo};color:#5a3030"><strong>${esc(c.tipo)}</strong></span>` : ''}
+      <span>${personas.length} persona${personas.length === 1 ? '' : 's'} documentada${personas.length === 1 ? '' : 's'}</span>
+    </div>
+  </div>`;
+
+  if (!personas.length) {
+    html += `<div class="empty">Sin defunciones documentadas con esta causa.</div>`;
+  } else {
+    html += `<h2>Personas fallecidas por esta causa</h2>`;
+    html += `<table><thead><tr><th>Persona</th><th>Fecha</th><th>Lugar</th><th>Batalla</th></tr></thead><tbody>`;
+    personas.forEach(p => {
+      html += `<tr>
+        <td>${linkPersona(p.id)}</td>
+        <td>${p.fecha_defuncion ? esc(fechaCorta(p.fecha_defuncion)) : '<span class="empty">sin fecha</span>'}</td>
+        <td>${p.id_lugar_defuncion ? linkLugar(p.id_lugar_defuncion) : ''}</td>
+        <td>${p.id_batalla_defuncion ? linkBatalla(p.id_batalla_defuncion) : ''}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  setApp(html);
+}
+
 // Ficha POSICIÓN — vista cruzada del día X del buque Y
 function renderPosicion(idBuque, fecha) {
   if (!idBuque || !fecha) {
@@ -2832,15 +3112,37 @@ function renderPosicion(idBuque, fecha) {
   const rutaCurso = D.rutas.find(r =>
     r.id_buque === idBuque && rangoCubre(r.fecha_partida, r.fecha_arribada, fecha));
 
-  // Inferir carga y pasajeros que viajaban en el buque en esa fecha.
-  // Usa la lógica 6.B: si el cargamento tiene lugar_carga/descarga, aparece
-  // en TODAS las rutas del tramo, no solo en la id_ruta declarada.
+  // Inferir carga, pasajeros, caudales y tropas que viajaban en el buque
+  // en esa fecha. Usa la lógica 6.B: si el registro tiene lugar de
+  // carga/descarga o embarque/desembarque, aparece en TODAS las rutas del
+  // tramo, no solo en la id_ruta declarada.
   const cargaABordo = rutaCurso
     ? D.carga.map(c => ({ ...c, _rol: rolEnRuta(c, rutaCurso) })).filter(c => c._rol)
     : [];
   const pasajerosABordo = rutaCurso
     ? D.pasajeros.map(p => ({ ...p, _rol: rolEnRuta(p, rutaCurso) })).filter(p => p._rol)
     : [];
+  const caudalesABordo = rutaCurso
+    ? D.caudales.map(c => ({ ...c, _rol: rolEnRuta(c, rutaCurso) })).filter(c => c._rol)
+    : [];
+  const tropasABordo = rutaCurso
+    ? D.transporte_tropas.map(t => ({ ...t, _rol: rolEnRuta(t, rutaCurso) })).filter(t => t._rol)
+    : [];
+
+  // ¿Pertenecía a alguna escuadra ese día?
+  // (a) Por la posición directa, si la trae explícita
+  // (b) Por una pertenencia activa (rango de fechas que incluye la fecha)
+  let escuadraDelDia = null;
+  if (pos && pos.id_escuadra) {
+    escuadraDelDia = CAT.escuadra[pos.id_escuadra] || null;
+  }
+  if (!escuadraDelDia) {
+    const pertActiva = D.pertenencias.find(pe =>
+      pe.id_buque === idBuque && pe.id_escuadra &&
+      (rangoCubre(pe.fecha_alta, pe.fecha_baja, fecha) ||
+       (!pe.fecha_alta && !pe.fecha_baja)));
+    if (pertActiva) escuadraDelDia = CAT.escuadra[pertActiva.id_escuadra] || null;
+  }
 
   let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
     <a href="#listado/posiciones">Posiciones</a> ›
@@ -2899,6 +3201,25 @@ function renderPosicion(idBuque, fecha) {
     html += `<div class="empty">Esta fecha no está dentro de ninguna ruta documentada del buque.</div>`;
   }
 
+  // Pertenencia a escuadra ese día
+  if (escuadraDelDia) {
+    html += `<div class="card" style="background:#f4f0e6;border-color:#d9cfa6;margin-top:10px">
+      <div class="card-title">⚓ Navegando con la <a href="#escuadra/${esc(escuadraDelDia.id)}">${esc(escuadraDelDia.nombre)}</a></div>
+      <div class="card-sub">
+        ${escuadraDelDia.tipo ? esc(escuadraDelDia.tipo) : ''}
+        ${escuadraDelDia.id_buque_insignia && escuadraDelDia.id_buque_insignia === idBuque
+          ? ' · <strong>este buque va de insignia</strong>'
+          : escuadraDelDia.id_buque_insignia
+          ? ' · insignia: ' + linkBuque(escuadraDelDia.id_buque_insignia)
+          : ''}
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="card" style="background:#fafafa;color:#6a6a6a;margin-top:10px">
+      <div class="card-sub">No pertenece a ninguna escuadra esta fecha (navegación independiente).</div>
+    </div>`;
+  }
+
   // Oficiales a bordo
   html += `<h2>Oficiales a bordo ese día <span class="badge badge-sea">${oficiales.length}</span></h2>`;
   if (oficiales.length) {
@@ -2951,6 +3272,52 @@ function renderPosicion(idBuque, fecha) {
       </tr>`;
     });
     html += `</tbody></table>`;
+  }
+
+  // Caudales a bordo (remesas monetarias del tesoro)
+  if (caudalesABordo.length) {
+    const totalCaudal = caudalesABordo.reduce((s, c) => s + (c.valor_pesos || 0), 0);
+    html += `<h2>Caudales transportados <span class="badge" style="background:#f0d9a6;color:#7a5a1f">${caudalesABordo.length}</span>`;
+    if (totalCaudal > 0) html += ` <small style="font-weight:normal;color:#6a6a6a">(${totalCaudal.toLocaleString('es-ES')} pesos)</small>`;
+    html += `</h2>`;
+    html += `<table><thead><tr><th>Tipo</th><th>Valor (pesos)</th><th>Remitente</th><th>Destinatario</th></tr></thead><tbody>`;
+    caudalesABordo.forEach(c => {
+      const mc = CAT.mercanciaCaudal[c.id_mercancias_caudales];
+      const remit = c.id_persona_remitente ? linkPersona(c.id_persona_remitente)
+                 : c.id_jefatura_remitente ? linkJefatura(c.id_jefatura_remitente)
+                 : esc(c.remitente || '');
+      const dest  = c.id_persona_destinatario ? linkPersona(c.id_persona_destinatario)
+                 : c.id_jefatura_destinatario ? linkJefatura(c.id_jefatura_destinatario)
+                 : esc(c.destinatario || '');
+      html += `<tr>
+        <td>${mc ? esc(mc.nombre) : esc(c.id_mercancias_caudales || '')}</td>
+        <td>${c.valor_pesos != null ? c.valor_pesos.toLocaleString('es-ES') : ''}</td>
+        <td>${remit}</td>
+        <td>${dest}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Tropas embarcadas
+  if (tropasABordo.length) {
+    const totalEfectivos = tropasABordo.reduce((s, t) =>
+      s + (t.oficiales_artilleria||0) + (t.artilleros||0) +
+          (t.oficiales_infanteria||0) + (t.soldados||0), 0);
+    html += `<h2>Tropas embarcadas <span class="badge">${tropasABordo.length}</span>`;
+    if (totalEfectivos > 0) html += ` <small style="font-weight:normal;color:#6a6a6a">(${totalEfectivos} efectivos)</small>`;
+    html += `</h2>`;
+    tropasABordo.forEach(t => {
+      const total = (t.oficiales_artilleria||0)+(t.artilleros||0)+
+                    (t.oficiales_infanteria||0)+(t.soldados||0);
+      const unidadRE = CAT.realesEjercitos[t.id_unidad_embarcada];
+      const nombreUnidad = t.nombre_unidad || (unidadRE && unidadRE.nombre) || 'Unidad sin nombre';
+      const entidad = unidadRE && unidadRE.entidad ? ` <small style="color:#6a6a6a;font-weight:normal">(${esc(unidadRE.entidad)})</small>` : '';
+      html += `<div class="card" style="margin-bottom:10px">
+        <div class="card-title">${esc(nombreUnidad)}${entidad}${t.integridad ? ` <span class="badge">${esc(t.integridad)}</span>` : ''}</div>
+        ${total ? `<div class="card-sub"><strong>${total}</strong> efectivos${t.destino_unidad ? ' · destino: ' + esc(t.destino_unidad) : ''}</div>` : ''}
+      </div>`;
+    });
   }
 
   setApp(html);
@@ -3501,53 +3868,160 @@ function renderMapaGlobal() {
     });
   }
 
-  // Rutas como líneas (partida → destino, eventualmente pasando por posiciones diarias)
+  // Rutas como líneas. Cada modo decide qué rutas dibujar y por qué puntos
+  // intermedios pasan:
+  //
+  // - Sin filtro:           todas las rutas, cada una sobre sus propios puntos.
+  // - Filtro de ESCUADRA:   la ruta de esa escuadra + las rutas propias de
+  //                         buques que pertenezcan a ella en el periodo.
+  // - Filtro de BUQUES:     las rutas propias del buque + las heredadas de
+  //                         escuadras a las que pertenecía durante el rango.
+  //                         La línea de una ruta heredada pasa por los puntos
+  //                         efectivos del PROPIO buque (no del insignia).
+  // - Sin buques (Set vacío con el botón "Ninguno"): nada.
   if (F.mostrarRutas) {
-    D.rutas.filter(r => buqueOk(r.id_buque) && escuadraOkRuta(r)).forEach(r => {
+    let rutasACTivas;
+    const ningunoSeleccionado = !F.escuadra && F.buques !== null && F.buques.size === 0;
+    const filtroBuqueActivo   = !F.escuadra && F.buques !== null && F.buques.size > 0;
+
+    if (ningunoSeleccionado) {
+      rutasACTivas = [];
+    } else if (filtroBuqueActivo) {
+      // Rutas propias del buque + rutas heredadas de sus escuadras
+      rutasACTivas = [];
+      D.rutas.forEach(r => {
+        if (r.id_buque && F.buques.has(r.id_buque)) {
+          rutasACTivas.push(r);              // propia
+          return;
+        }
+        if (r.id_escuadra && !r.id_buque) {
+          for (const bid of F.buques) {
+            if (buqueActivoEnEscuadra(bid, r.id_escuadra, r.fecha_partida) ||
+                buqueActivoEnEscuadra(bid, r.id_escuadra, r.fecha_arribada)) {
+              // Marcamos para qué buque la trazamos, así sabremos por qué
+              // puntos pasa.
+              rutasACTivas.push({ ...r, _heredadaPara: bid });
+              break;
+            }
+          }
+        }
+      });
+    } else if (F.escuadra) {
+      rutasACTivas = D.rutas.filter(r => escuadraOkRuta(r));
+    } else {
+      rutasACTivas = D.rutas.slice();
+    }
+
+    rutasACTivas.forEach(r => {
       const inRange = fechaOk(r.fecha_partida) || fechaOk(r.fecha_arribada);
       if (!inRange) return;
       const lp = CAT.lugar[r.id_lugar_partida];
       const ld = CAT.lugar[r.id_lugar_destino];
       const pts = [];
       if (lp && lp.latitud != null) pts.push([lp.latitud, lp.longitud]);
-      // Posiciones intermedias dentro del rango de la ruta
-      D.posiciones
-        .filter(p => p.id_buque === r.id_buque && p.latitud != null && p.longitud != null
-                  && rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha))
+
+      // Posiciones intermedias específicas de esta ruta
+      let posicionesRuta = [];
+      if (r._heredadaPara) {
+        // Ruta heredada por un buque: usamos sus posiciones efectivas
+        // (propias o heredadas de la propia escuadra) en el rango de la ruta.
+        posicionesRuta = posicionesEfectivasDeBuque(r._heredadaPara).filter(p =>
+          p.latitud != null && p.longitud != null &&
+          rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha));
+      } else if (r.id_buque) {
+        // Ruta de un buque: sus posiciones diarias propias en el rango
+        posicionesRuta = D.posiciones.filter(p =>
+          p.id_buque === r.id_buque &&
+          p.latitud != null && p.longitud != null &&
+          rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha));
+      } else if (r.id_escuadra) {
+        // Ruta de escuadra sin buque (caso de modo escuadra o sin filtros):
+        // posiciones puras (sin id_buque); si no hay, fallback al insignia.
+        posicionesRuta = D.posiciones.filter(p =>
+          p.id_escuadra === r.id_escuadra && !p.id_buque &&
+          p.latitud != null && p.longitud != null &&
+          rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha));
+        if (!posicionesRuta.length) {
+          const ins = CAT.escuadra[r.id_escuadra]?.id_buque_insignia;
+          if (ins) {
+            posicionesRuta = D.posiciones.filter(p =>
+              p.id_buque === ins &&
+              p.latitud != null && p.longitud != null &&
+              rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha));
+          }
+        }
+      }
+      posicionesRuta
         .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
         .forEach(p => pts.push([p.latitud, p.longitud]));
+
       if (ld && ld.latitud != null) pts.push([ld.latitud, ld.longitud]);
       if (pts.length >= 2) {
-        lineas.push({ points: pts, color: coloresBuque[r.id_buque] || '#1e3a5f', label: r.id });
+        // Color: si es ruta de un buque (propia o heredada-para), su color;
+        // si es ruta de escuadra sin marca, el del insignia o gris.
+        let col = null;
+        if (r._heredadaPara)     col = coloresBuque[r._heredadaPara];
+        else if (r.id_buque)     col = coloresBuque[r.id_buque];
+        else if (r.id_escuadra)  col = coloresBuque[CAT.escuadra[r.id_escuadra]?.id_buque_insignia];
+        lineas.push({ points: pts, color: col || '#1e3a5f', label: r.id });
       }
     });
   }
 
-  // Posiciones diarias — agrupadas por formación (insignia encabeza)
+  // Posiciones diarias — agrupadas por formación (insignia encabeza).
+  // Cuando hay filtro de buques (sin filtro de escuadra), cada buque
+  // expande sus posiciones efectivas: las propias y las heredadas de las
+  // escuadras a las que pertenecía en cada momento.
   if (F.mostrarPosiciones) {
-    const posFiltradas = D.posiciones.filter(p =>
-      p.latitud != null && p.longitud != null &&
-      buqueOk(p.id_buque) && fechaOk(p.fecha) && escuadraOkPos(p));
+    let posFiltradas;
+    const ningunoSeleccionado = !F.escuadra && F.buques !== null && F.buques.size === 0;
+    const filtroBuqueActivo   = !F.escuadra && F.buques !== null && F.buques.size > 0;
+
+    if (ningunoSeleccionado) {
+      posFiltradas = [];
+    } else if (filtroBuqueActivo) {
+      // Expandir cada buque seleccionado a sus posiciones efectivas
+      const seen = new Set(); // dedupe (fecha + lat + lon)
+      posFiltradas = [];
+      F.buques.forEach(bid => {
+        posicionesEfectivasDeBuque(bid).forEach(p => {
+          if (p.latitud == null || p.longitud == null || !fechaOk(p.fecha)) return;
+          const k = `${p.id_buque}|${p.fecha}|${p.latitud}|${p.longitud}`;
+          if (seen.has(k)) return;
+          seen.add(k);
+          posFiltradas.push(p);
+        });
+      });
+    } else {
+      posFiltradas = D.posiciones.filter(p =>
+        p.latitud != null && p.longitud != null &&
+        buqueOk(p.id_buque) && fechaOk(p.fecha) && escuadraOkPos(p));
+    }
     const agrupados = agrupaPosicionesPorFormacion(posFiltradas, coloresBuque);
     agrupados.forEach(pt => puntos.push(pt));
 
-    // Derrota del buque insignia como línea destacada, por escuadra
-    const escuadrasEnMapa = [...new Set(posFiltradas
-      .map(p => escuadraDePosicion(p)).filter(Boolean))];
-    escuadrasEnMapa.forEach(eid => {
-      const e = CAT.escuadra[eid];
-      if (!e || !e.id_buque_insignia) return;
-      const derrota = posFiltradas
-        .filter(p => p.id_buque === e.id_buque_insignia &&
-                     escuadraDePosicion(p) === eid)
-        .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
-        .map(p => [p.latitud, p.longitud]);
-      if (derrota.length >= 2) {
-        lineas.push({ points: derrota,
-          color: coloresBuque[e.id_buque_insignia] || '#1e3a5f',
-          label: 'Derrota insignia ' + e.nombre });
-      }
-    });
+    // Derrota del buque insignia como línea destacada, POR escuadra. Es una
+    // línea conceptual que representa la formación; tiene sentido cuando
+    // miras el conjunto o una escuadra completa, pero NO cuando filtras
+    // buques individuales (cada buque ya tiene sus rutas propias trazadas).
+    if (!filtroBuqueActivo) {
+      const escuadrasEnMapa = [...new Set(posFiltradas
+        .map(p => escuadraDePosicion(p)).filter(Boolean))];
+      escuadrasEnMapa.forEach(eid => {
+        const e = CAT.escuadra[eid];
+        if (!e || !e.id_buque_insignia) return;
+        const derrota = posFiltradas
+          .filter(p => p.id_buque === e.id_buque_insignia &&
+                       escuadraDePosicion(p) === eid)
+          .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+          .map(p => [p.latitud, p.longitud]);
+        if (derrota.length >= 2) {
+          lineas.push({ points: derrota,
+            color: coloresBuque[e.id_buque_insignia] || '#1e3a5f',
+            label: 'Derrota insignia ' + e.nombre });
+        }
+      });
+    }
   }
 
   html += `<div id="map-global" class="map-container tall"></div>`;

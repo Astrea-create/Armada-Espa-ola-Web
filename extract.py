@@ -192,6 +192,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id_lugar_nacimiento":   ("id_lugar_nacimiento",  limpia),
         "fecha_defuncion":       ("fecha_defuncion",      fecha_iso),
         "id_lugar_defuncion":    ("id_lugar_defuncion",   limpia),
+        "id_causa_defuncion":    ("id_causa_defuncion",   limpia),
         "id_batalla_defuncion":  ("id_batalla_defuncion", limpia),
         "id_rama":               ("id_rama",              limpia),
         "id_profesion":          ("id_profesion",         limpia),  # puede no existir en la hoja
@@ -199,6 +200,21 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id_jefatura":           ("id_jefatura",          limpia),
         "imagen":                ("imagen",               limpia),
     })
+
+    # ── Auto-detección de retratos en assets/retratos/ ─────────────────────
+    # Cualquier archivo cuyo nombre coincida con un id_persona (PER00xxx.png,
+    # .jpg, .jpeg, .webp) se asocia automáticamente sin tener que rellenar
+    # el campo "imagen" en el Excel. Si el Excel ya trae una imagen, esa
+    # tiene prioridad.
+    carpeta_retratos = Path("assets/retratos")
+    retratos_detectados: Dict[str, str] = {}
+    if carpeta_retratos.exists():
+        for ext in ("png", "jpg", "jpeg", "webp", "PNG", "JPG", "JPEG", "WEBP"):
+            for img in carpeta_retratos.glob(f"*.{ext}"):
+                retratos_detectados[img.stem] = f"assets/retratos/{img.name}"
+    for p in D["personal"]:
+        if not p.get("imagen") and p["id"] in retratos_detectados:
+            p["imagen"] = retratos_detectados[p["id"]]
 
     # ── RELACIONES (parentesco/vínculos) ────────────────────────────────────
     D["relaciones"] = filas(hoja(xl_per, "PERSONAL_CLAUDE.xlsx", "RELACIONES PERSONALES", "Relaciones"), {
@@ -498,6 +514,16 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
     D["enfermedades"] = filas(hoja(xl_lug, "LUGAR_CLAUDE.xlsx", "Enfermedades"), {
         "id":     ("id_enfermedad",     limpia),
         "nombre": ("nombre_enfermedad", limpia),
+    })
+
+    # ── CAUSAS DE DEFUNCIÓN (catálogo) ─────────────────────────────────────
+    # Distingue de qué murió cada persona: Combate / Accidente / Enfermedad /
+    # Natural / Violenta. Complementa a fecha_defuncion + id_lugar_defuncion
+    # + id_batalla_defuncion en la hoja PERSONAL.
+    D["causas_defuncion"] = filas(hoja(xl_lug, "LUGAR_CLAUDE.xlsx", "Causa Defunción", "Causa Defuncion", "Causas_defuncion"), {
+        "id":     ("id_causa_defuncion",     limpia),
+        "nombre": ("nombre_causa_defuncion", limpia),
+        "tipo":   ("tipo",                   limpia),
     })
 
     # ── MERCANCÍAS Y CATÁLOGOS ASOCIADOS ───────────────────────────────────
