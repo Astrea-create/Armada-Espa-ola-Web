@@ -343,6 +343,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id":                ("id_ruta",          limpia),
         "id_buque":          ("id_buque",         limpia),
         "id_escuadra":       ("id_escuadra",      limpia),
+        "id_comision":       ("id_comision",      limpia),
         "puerto_partida":    ("puerto_partida",   limpia),
         "id_lugar_partida":  ("id_lugar_partida", limpia),
         "fecha_partida":     ("fecha_partida",    fecha_iso),
@@ -350,6 +351,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id_lugar_destino":  ("id_lugar_destino", limpia),
         "fecha_arribada":    ("fecha_arribada",   fecha_iso),
         "millas":            ("millas_recorridas", to_float),
+        "observaciones":     ("Observaciones",    limpia),
     })
 
     # ── PASAJEROS (con campos 6.B: lugar de embarque y desembarque) ───────
@@ -464,10 +466,13 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
 
     # ── PERTENENCIAS DE BUQUE A ESCUADRA ───────────────────────────────────
     # La columna `insignia` distingue "insignia principal" de "segunda insignia".
+    # Si la escuadra está organizada en divisiones, `id_division` indica a
+    # cuál de ellas pertenece el buque dentro de la escuadra.
     D["pertenencias"] = filas(hoja(xl_buq, "BUQUE_CLAUDE.xlsx", "Pertenencia Escuadra"), {
         "id":                  ("id_pertenencia",      limpia),
         "id_buque":            ("id_buque",            limpia),
         "id_escuadra":         ("id_escuadra",         limpia),
+        "id_division":         ("id_division",         limpia),
         "funcion_en_escuadra": ("funcion_en_escuadra", limpia),
         "insignia":            ("insignia",            limpia),
         "fecha_alta":          ("fecha_alta",          fecha_iso),
@@ -600,6 +605,34 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "tipo":                ("tipo",                limpia),
         "fecha_constitucion":  ("fecha_constitucion",  fecha_iso),
         "fecha_disolucion":    ("fecha_disolucion",    fecha_iso),
+        "descripcion":         ("descripcion",         limpia),
+    })
+
+    # ── DIVISIONES DENTRO DE UNA ESCUADRA ──────────────────────────────────
+    # Subdivisión de una escuadra en cuerpos o divisiones, cada una con su
+    # propio jefe e insignia. Los buques referencian su división vía
+    # pertenencias.id_division.
+    D["divisiones"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Division"), {
+        "id":                  ("id_division",         limpia),
+        "id_escuadra":         ("id_escuadra",         limpia),
+        "nombre":              ("nombre_division",     limpia),
+        "id_buque_insignia":   ("id_buque_insignia",   limpia),
+        "id_jefe_division":    ("id_jefe_division",    limpia),
+        "fecha_inicio":        ("fecha_inicio",        fecha_iso),
+        "fecha_fin":           ("fecha_fin",           fecha_iso),
+    })
+
+    # ── COMISIONES (catálogo) ──────────────────────────────────────────────
+    # Unidad lógica que agrupa varias rutas bajo la misma orden o misión.
+    # Una comisión típica: "Conducción de azogues a Nueva España 1788" con
+    # dos rutas (Cádiz→Habana, Habana→Veracruz). Las rutas la referencian
+    # vía rutas.id_comision.
+    D["comisiones"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Comision"), {
+        "id":                  ("id_comision",         limpia),
+        "nombre":              ("nombre_comision",     limpia),
+        "fecha_inicio":        ("fecha_inicio",        fecha_iso),
+        "fecha_fin":           ("fecha_fin",           fecha_iso),
+        "id_jefatura_orden":   ("id_jefatura_orden",   limpia),
         "descripcion":         ("descripcion",         limpia),
     })
 

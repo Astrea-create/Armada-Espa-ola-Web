@@ -409,6 +409,8 @@ const CAT = {
   enfermedad:      indexBy(D.enfermedades, 'id'),
   realesEjercitos: indexBy(D.reales_ejercitos, 'id'),
   causa:           indexBy(D.causas_defuncion, 'id'),
+  comision:        indexBy(D.comisiones, 'id'),
+  division:        indexBy(D.divisiones, 'id'),
 };
 
 function indexBy(arr, key) {
@@ -888,6 +890,8 @@ const linkRama     = id => link(CAT.rama, id, 'rama');
 const linkInfra    = id => link(CAT.infra, id, 'infraestructura');
 const linkEscuadra = id => link(CAT.escuadra, id, 'escuadra');
 const linkBatalla  = id => link(CAT.batalla, id, 'batalla');
+const linkComision = id => link(CAT.comision, id, 'comision');
+const linkDivision = id => link(CAT.division, id, 'division');
 
 // Resuelve el nombre de una función mirando primero en el catálogo correcto
 // según el prefijo del ID: FBQ### → funciones de buque, FUNC### → funciones generales.
@@ -1105,6 +1109,8 @@ function router() {
     case 'escuadra':     return renderEscuadra(parts[1]);
     case 'batalla':      return renderBatalla(parts[1]);
     case 'causa':        return renderCausa(parts[1]);
+    case 'comision':     return renderComision(parts[1]);
+    case 'division':     return renderDivision(parts[1]);
     case 'mapa':         return renderMapaGlobal();
     case 'quienes':      return renderQuienes();
     case 'contacto':     return renderContacto();
@@ -1172,7 +1178,9 @@ function renderHome() {
         <a href="#listado/funcionesBuque">funciones a bordo</a> ·
         <a href="#listado/mercancias">mercancías</a> ·
         <a href="#listado/titulos">títulos y honores</a> ·
-        <a href="#listado/causas">causas de defunción</a>
+        <a href="#listado/causas">causas de defunción</a> ·
+        <a href="#listado/comisiones">comisiones</a> ·
+        <a href="#listado/divisiones">divisiones</a>
       </p>
       <p class="explora-sugeridos">
         Para empezar: <a href="#persona/PER00092">Juan Langara Huarte</a> ·
@@ -1536,7 +1544,6 @@ function renderListado(tipo) {
     html += `</tbody></table>`;
   }
   else if (tipo === 'causas') {
-    html += `<h1>Causas de defunción (${D.causas_defuncion.length})</h1>`;
     html += `<p style="color:#6a6a6a">De qué fallecieron los hombres de la Armada: combate, naufragio, enfermedad, vejez… Cruza la información que ya hay en la hoja PERSONAL con un catálogo común.</p>`;
     // Agrupar por tipo para que sea más legible
     const colorTipo = {
@@ -1557,8 +1564,44 @@ function renderListado(tipo) {
     });
     html += `</tbody></table>`;
   }
+  else if (tipo === 'comisiones') {
+    html += `<h1>Comisiones (${D.comisiones.length})</h1>`;
+    html += `<p style="color:#6a6a6a">Misiones que agrupan una o varias rutas bajo una misma orden o real disposición. Útil para seguir el destino final de una expedición que se compone de varios tramos.</p>`;
+    html += `<table><thead><tr><th>ID</th><th>Comisión</th><th>Inicio</th><th>Fin</th><th>Rutas</th><th>Orden de</th></tr></thead><tbody>`;
+    D.comisiones.forEach(c => {
+      const rutas = D.rutas.filter(r => r.id_comision === c.id).length;
+      html += `<tr>
+        <td><code>${esc(c.id)}</code></td>
+        <td><a href="#comision/${esc(c.id)}">${esc(c.nombre)}</a></td>
+        <td>${c.fecha_inicio ? esc(fechaCorta(c.fecha_inicio)) : '<span class="empty">—</span>'}</td>
+        <td>${c.fecha_fin ? esc(fechaCorta(c.fecha_fin)) : '<span class="empty">—</span>'}</td>
+        <td>${rutas || '<span class="empty">—</span>'}</td>
+        <td>${c.id_jefatura_orden ? linkJefatura(c.id_jefatura_orden) : ''}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  else if (tipo === 'divisiones') {
+    html += `<h1>Divisiones (${D.divisiones.length})</h1>`;
+    html += `<p style="color:#6a6a6a">Subdivisiones internas de una escuadra. Una escuadra grande puede organizarse en varias divisiones, cada una con su propio jefe e insignia.</p>`;
+    html += `<table><thead><tr><th>ID</th><th>División</th><th>Escuadra</th><th>Jefe</th><th>Insignia</th><th>Buques</th></tr></thead><tbody>`;
+    D.divisiones.forEach(d => {
+      const buques = D.pertenencias.filter(pe => pe.id_division === d.id).length;
+      html += `<tr>
+        <td><code>${esc(d.id)}</code></td>
+        <td><a href="#division/${esc(d.id)}">${esc(d.nombre)}</a></td>
+        <td>${linkEscuadra(d.id_escuadra)}</td>
+        <td>${d.id_jefe_division ? linkPersona(d.id_jefe_division) : '<span class="empty">—</span>'}</td>
+        <td>${d.id_buque_insignia ? linkBuque(d.id_buque_insignia) : '<span class="empty">—</span>'}</td>
+        <td>${buques || '<span class="empty">—</span>'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
   setApp(html);
 }
+
+// Ficha PERSONA — datos biográficos, ascensos, destinos, etc.
 function renderPersona(id) {
   const p = CAT.persona[id];
   if (!p) { setApp(`<p class="empty">Persona ${esc(id)} no encontrada.</p>`); return; }
@@ -1892,6 +1935,22 @@ function renderPersona(id) {
     });
     html += `</tbody></table>`;
   } else html += `<div class="empty">Sin destinos de tierra.</div>`;
+
+  // Jefaturas de división (si la persona ha mandado alguna)
+  const jefDivs = D.divisiones.filter(d => d.id_jefe_division === id);
+  if (jefDivs.length) {
+    html += `<h2>Jefatura de división <span class="badge badge-sea">${jefDivs.length}</span></h2>`;
+    html += `<table><thead><tr><th>División</th><th>Escuadra</th><th>Insignia</th><th>Periodo</th></tr></thead><tbody>`;
+    jefDivs.forEach(d => {
+      html += `<tr>
+        <td>${linkDivision(d.id)}</td>
+        <td>${linkEscuadra(d.id_escuadra)}</td>
+        <td>${d.id_buque_insignia ? linkBuque(d.id_buque_insignia) : ''}</td>
+        <td>${rango(d.fecha_inicio, d.fecha_fin)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
 
   // Mandos de escuadra ejercidos
   const mandosEsc = sortByDate(D.mandos_escuadra.filter(m => m.id_persona === id),
@@ -2255,17 +2314,39 @@ function renderBuque(id) {
   const pertenenciasBuque = sortByDate(D.pertenencias.filter(p => p.id_buque === id), 'fecha_alta');
   if (pertenenciasBuque.length) {
     html += `<h2>Pertenencia a escuadras <span class="badge">${pertenenciasBuque.length}</span></h2>`;
-    html += `<table><thead><tr><th>Escuadra</th><th>Alta</th><th>Baja</th><th>Notas</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Escuadra</th><th>División</th><th>Función</th><th>Alta</th><th>Baja</th><th>Notas</th></tr></thead><tbody>`;
     pertenenciasBuque.forEach(p => {
-      const e = CAT.escuadra[p.id_escuadra];
       html += `<tr>
         <td>${linkEscuadra(p.id_escuadra)}${distintivoInsignia(id, p.id_escuadra)}</td>
+        <td>${p.id_division ? linkDivision(p.id_division) : ''}${p.insignia ? ` <span class="badge" style="background:#c9aa6a;color:#3a2a10">${esc(p.insignia)}</span>` : ''}</td>
+        <td>${esc(p.funcion_en_escuadra || '')}</td>
         <td>${p.fecha_alta ? esc(fechaCorta(p.fecha_alta)) : '<span class="empty">—</span>'}</td>
         <td>${p.fecha_baja ? esc(fechaCorta(p.fecha_baja)) : '<span class="empty">en activo</span>'}</td>
         <td><small>${esc([p.motivo_alta, p.motivo_baja].filter(Boolean).join(' / '))}</small></td>
       </tr>`;
     });
     html += `</tbody></table>`;
+  }
+
+  // Comisiones en las que participó el buque (a través de sus rutas)
+  const comisionesBuque = [...new Set(
+    D.rutas.filter(r => r.id_buque === id && r.id_comision).map(r => r.id_comision)
+  )];
+  if (comisionesBuque.length) {
+    html += `<h2>Comisiones <span class="badge">${comisionesBuque.length}</span></h2>`;
+    comisionesBuque.forEach(cid => {
+      const com = CAT.comision[cid];
+      if (!com) return;
+      const numRutas = D.rutas.filter(r => r.id_buque === id && r.id_comision === cid).length;
+      html += `<a class="card card-link" href="#comision/${esc(cid)}">
+        <div class="card-title">📋 ${esc(com.nombre)}</div>
+        <div class="card-sub">
+          ${numRutas} ruta${numRutas===1?'':'s'} en esta comisión
+          ${com.fecha_inicio ? ' · ' + fechaCorta(com.fecha_inicio) : ''}
+          ${com.fecha_fin ? ' → ' + fechaCorta(com.fecha_fin) : ''}
+        </div>
+      </a>`;
+    });
   }
 
   // Combates en los que participó este buque
@@ -2691,6 +2772,22 @@ function renderRuta(id) {
     </div>
   </div>`;
 
+  // Si forma parte de una comisión, destacarlo en una tarjeta
+  if (r.id_comision) {
+    const com = CAT.comision[r.id_comision];
+    html += `<div class="card" style="background:#eef4fa;border-color:#cfd9e3;margin:10px 0">
+      <div class="card-title">📋 Forma parte de la comisión: ${linkComision(r.id_comision)}</div>
+      ${com && com.descripcion ? `<div class="card-sub" style="font-style:italic">${esc(com.descripcion)}</div>` : ''}
+    </div>`;
+  }
+
+  // Observaciones de la ruta (avería, incidencias, etc.)
+  if (r.observaciones) {
+    html += `<div class="card" style="background:#fff7e8;border-color:#e8c97a;margin:10px 0">
+      <div class="card-sub"><strong>Observaciones:</strong> ${esc(r.observaciones)}</div>
+    </div>`;
+  }
+
   // Mapa de la travesía
   const puntosMapa = [];
   const lineasMapa = [];
@@ -3089,6 +3186,242 @@ function renderCausa(id) {
       </tr>`;
     });
     html += `</tbody></table>`;
+  }
+
+  setApp(html);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Ficha COMISIÓN — agrupa rutas que forman parte de la misma orden
+// ════════════════════════════════════════════════════════════════════════
+function renderComision(id) {
+  const c = CAT.comision[id];
+  if (!c) { setApp(`<p class="empty">Comisión ${esc(id)} no encontrada.</p>`); return; }
+
+  // Rutas de esta comisión, en orden cronológico
+  const rutas = sortByDate(
+    D.rutas.filter(r => r.id_comision === id),
+    'fecha_partida');
+
+  // Buques que participaron (deducidos de las rutas: id_buque directo o
+  // miembros de la escuadra si la ruta es de escuadra)
+  const buquesSet = new Set();
+  rutas.forEach(r => {
+    if (r.id_buque) buquesSet.add(r.id_buque);
+    if (r.id_escuadra) {
+      D.pertenencias.forEach(pe => {
+        if (pe.id_escuadra === r.id_escuadra &&
+            (buqueActivoEnEscuadra(pe.id_buque, r.id_escuadra, r.fecha_partida) ||
+             buqueActivoEnEscuadra(pe.id_buque, r.id_escuadra, r.fecha_arribada))) {
+          buquesSet.add(pe.id_buque);
+        }
+      });
+    }
+  });
+
+  // Totales de carga y caudales con la lógica 6.B
+  const cargaTotal = [];
+  const caudalesTotal = [];
+  const tropasTotal = [];
+  rutas.forEach(r => {
+    D.carga.forEach(c => {
+      if (rolEnRuta(c, r)) cargaTotal.push({ ...c, _ruta: r });
+    });
+    D.caudales.forEach(c => {
+      if (rolEnRuta(c, r)) caudalesTotal.push({ ...c, _ruta: r });
+    });
+    D.transporte_tropas.forEach(t => {
+      if (rolEnRuta(t, r)) tropasTotal.push({ ...t, _ruta: r });
+    });
+  });
+
+  // Personas que participaron (oficiales en algún buque durante alguna ruta)
+  const personasSet = new Set();
+  rutas.forEach(r => {
+    if (!r.id_buque) return;
+    D.destinos_mar.forEach(d => {
+      if (d.id_buque !== r.id_buque) return;
+      const ini = d.fecha_inicio;
+      const fin = d.fecha_cese || d.fecha_cese_implicita;
+      if (rangosSeSolapan(ini, fin, r.fecha_partida, r.fecha_arribada)) {
+        personasSet.add(d.id_persona);
+      }
+    });
+  });
+
+  // Cabecera
+  let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
+    <a href="#listado/comisiones">Comisiones</a> › ${esc(c.nombre)}</p>`;
+  html += `<div class="detail-head">
+    <span class="kind">Comisión · ${esc(c.id)}</span>
+    <h1>${esc(c.nombre)}</h1>
+    <div class="meta-row">
+      ${c.fecha_inicio ? `<span>Inicio: <strong>${esc(fechaCorta(c.fecha_inicio))}</strong></span>` : ''}
+      ${c.fecha_fin ? `<span>Fin: <strong>${esc(fechaCorta(c.fecha_fin))}</strong></span>` : ''}
+      ${c.id_jefatura_orden ? `<span>Orden de: <strong>${linkJefatura(c.id_jefatura_orden)}</strong></span>` : ''}
+    </div>
+    ${c.descripcion ? `<p style="margin-top:10px;color:#3a3a3a;font-style:italic">${esc(c.descripcion)}</p>` : ''}
+  </div>`;
+
+  // Resumen
+  html += `<div class="card" style="background:#eef4fa;border-color:#cfd9e3">
+    <div class="card-sub">
+      <strong>${rutas.length}</strong> ruta${rutas.length===1?'':'s'} ·
+      <strong>${buquesSet.size}</strong> buque${buquesSet.size===1?'':'s'} ·
+      <strong>${personasSet.size}</strong> persona${personasSet.size===1?'':'s'} documentada${personasSet.size===1?'':'s'}
+      ${cargaTotal.length ? ` · ${cargaTotal.length} cargas` : ''}
+      ${caudalesTotal.length ? ` · ${caudalesTotal.length} caudales` : ''}
+      ${tropasTotal.length ? ` · ${tropasTotal.length} transportes de tropas` : ''}
+    </div>
+  </div>`;
+
+  // Mapa unificado de toda la comisión
+  const puntosMapa = [];
+  const lineasMapa = [];
+  rutas.forEach(r => {
+    const lp = CAT.lugar[r.id_lugar_partida];
+    const ld = CAT.lugar[r.id_lugar_destino];
+    const pts = [];
+    if (lp && lp.latitud != null) {
+      pts.push([lp.latitud, lp.longitud]);
+      puntosMapa.push({ lat: lp.latitud, lon: lp.longitud, color: '#1e3a5f', size: 7,
+        popup: `<strong>${esc(lp.nombre)}</strong><br>${esc(r.puerto_partida || '')}<br>Ruta ${linkRuta(r.id)}` });
+    }
+    // Posiciones intermedias del buque o insignia
+    const idBuquePos = r.id_buque ||
+      (r.id_escuadra && CAT.escuadra[r.id_escuadra]?.id_buque_insignia);
+    if (idBuquePos) {
+      D.posiciones
+        .filter(p => p.id_buque === idBuquePos && p.latitud != null && p.longitud != null
+                  && rangoCubre(r.fecha_partida, r.fecha_arribada, p.fecha))
+        .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+        .forEach(p => pts.push([p.latitud, p.longitud]));
+    }
+    if (ld && ld.latitud != null) {
+      pts.push([ld.latitud, ld.longitud]);
+      puntosMapa.push({ lat: ld.latitud, lon: ld.longitud, color: '#5a7a4a', size: 7,
+        popup: `<strong>${esc(ld.nombre)}</strong><br>${esc(r.puerto_destino || '')}<br>Ruta ${linkRuta(r.id)}` });
+    }
+    if (pts.length >= 2) lineasMapa.push({ points: pts, color: '#1e3a5f', label: r.id });
+  });
+  if (puntosMapa.length) {
+    const mapId = 'mapa-comision-' + esc(id);
+    html += `<div id="${mapId}" class="ficha-map" style="height:380px;margin:14px 0"></div>`;
+    pedirMapa(mapId, puntosMapa, { lines: lineasMapa });
+  }
+
+  // Rutas en orden
+  html += `<h2>Rutas de esta comisión <span class="badge badge-route">${rutas.length}</span></h2>`;
+  rutas.forEach(r => {
+    html += `<a class="card card-link" href="#ruta/${esc(r.id)}">
+      <div class="card-title">${esc(r.puerto_partida || '?')} → ${esc(r.puerto_destino || '?')}</div>
+      <div class="card-sub">
+        ${r.id_buque ? linkBuque(r.id_buque) : (r.id_escuadra ? 'Escuadra: ' + linkEscuadra(r.id_escuadra) : '')}
+        ${r.fecha_partida ? ' · partió ' + fechaCorta(r.fecha_partida) : ''}
+        ${r.fecha_arribada ? ' → arriba ' + fechaCorta(r.fecha_arribada) : ''}
+        ${r.millas ? ' · ' + r.millas.toLocaleString('es-ES') + ' millas' : ''}
+      </div>
+    </a>`;
+  });
+
+  // Buques participantes
+  if (buquesSet.size) {
+    html += `<h2>Buques participantes <span class="badge badge-sea">${buquesSet.size}</span></h2>`;
+    [...buquesSet].forEach(bid => {
+      const b = CAT.buque[bid];
+      if (!b) return;
+      html += `<a class="card card-link" href="#buque/${esc(bid)}">
+        <div class="card-title">${esc(b.nombre)}</div>
+        <div class="card-sub">${esc(b.tipo || '')}${b.n_canones ? ' · ' + esc(b.n_canones) + ' cañones' : ''}</div>
+      </a>`;
+    });
+  }
+
+  // Carga total
+  if (cargaTotal.length) {
+    const totalPorMerc = {};
+    cargaTotal.forEach(c => {
+      const k = c.id_mercancia || 'sin_id';
+      if (!totalPorMerc[k]) totalPorMerc[k] = { items: [], cantidad: 0, unidad: c.unidad };
+      totalPorMerc[k].items.push(c);
+      if (typeof c.cantidad === 'number') totalPorMerc[k].cantidad += c.cantidad;
+    });
+    html += `<h2>Carga transportada <span class="badge">${cargaTotal.length}</span></h2>`;
+    html += `<table><thead><tr><th>Mercancía</th><th>Total</th><th>Cargas</th></tr></thead><tbody>`;
+    Object.keys(totalPorMerc).forEach(k => {
+      const g = totalPorMerc[k];
+      html += `<tr>
+        <td>${linkMercancia(k)}</td>
+        <td>${g.cantidad ? g.cantidad.toLocaleString('es-ES') + ' ' + esc(g.unidad || '') : '—'}</td>
+        <td>${g.items.length}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Caudales total
+  if (caudalesTotal.length) {
+    const totalPesos = caudalesTotal.reduce((s, c) => s + (c.valor_pesos || 0), 0);
+    html += `<h2>Caudales transportados <span class="badge" style="background:#f0d9a6;color:#7a5a1f">${caudalesTotal.length}</span>`;
+    if (totalPesos > 0) html += ` <small style="font-weight:normal;color:#6a6a6a">(${totalPesos.toLocaleString('es-ES')} pesos)</small>`;
+    html += `</h2>`;
+    html += `<table><thead><tr><th>Tipo</th><th>Valor (pesos)</th><th>Ruta</th></tr></thead><tbody>`;
+    caudalesTotal.forEach(c => {
+      const mc = CAT.mercanciaCaudal[c.id_mercancias_caudales];
+      html += `<tr>
+        <td>${mc ? esc(mc.nombre) : esc(c.id_mercancias_caudales || '')}</td>
+        <td>${c.valor_pesos != null ? c.valor_pesos.toLocaleString('es-ES') : ''}</td>
+        <td>${linkRuta(c._ruta.id)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  setApp(html);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Ficha DIVISIÓN — subdivisión de una escuadra
+// ════════════════════════════════════════════════════════════════════════
+function renderDivision(id) {
+  const d = CAT.division[id];
+  if (!d) { setApp(`<p class="empty">División ${esc(id)} no encontrada.</p>`); return; }
+
+  const escuadra = CAT.escuadra[d.id_escuadra];
+  // Buques de esta división (vía pertenencias)
+  const pertenencias = D.pertenencias.filter(pe => pe.id_division === id);
+  const insignia = CAT.buque[d.id_buque_insignia];
+
+  // Cabecera
+  let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
+    <a href="#listado/divisiones">Divisiones</a> › ${esc(d.nombre)}</p>`;
+  html += `<div class="detail-head">
+    <span class="kind">División · ${esc(d.id)}</span>
+    <h1>${esc(d.nombre)}</h1>
+    <div class="meta-row">
+      ${escuadra ? `<span>Dentro de: <strong>${linkEscuadra(d.id_escuadra)}</strong></span>` : ''}
+      ${insignia ? `<span>Insignia: <strong>${linkBuque(d.id_buque_insignia)}</strong></span>` : ''}
+      ${d.id_jefe_division ? `<span>Jefe de división: <strong>${linkPersona(d.id_jefe_division)}</strong></span>` : ''}
+      ${d.fecha_inicio ? `<span>Desde ${esc(fechaCorta(d.fecha_inicio))}</span>` : ''}
+      ${d.fecha_fin ? `<span>Hasta ${esc(fechaCorta(d.fecha_fin))}</span>` : ''}
+    </div>
+  </div>`;
+
+  // Buques que la integran
+  html += `<h2>Buques en esta división <span class="badge badge-sea">${pertenencias.length}</span></h2>`;
+  if (pertenencias.length) {
+    html += `<table><thead><tr><th>Buque</th><th>Insignia</th><th>Alta</th><th>Baja</th></tr></thead><tbody>`;
+    pertenencias.forEach(pe => {
+      html += `<tr>
+        <td>${linkBuque(pe.id_buque)}</td>
+        <td>${pe.insignia ? `<span class="badge" style="background:#c9aa6a;color:#3a2a10">${esc(pe.insignia)}</span>` : ''}</td>
+        <td>${pe.fecha_alta ? esc(fechaCorta(pe.fecha_alta)) : ''}</td>
+        <td>${pe.fecha_baja ? esc(fechaCorta(pe.fecha_baja)) : ''}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<div class="empty">Sin buques asignados a esta división.</div>`;
   }
 
   setApp(html);
@@ -3519,6 +3852,24 @@ function renderEscuadra(id) {
     </div>
     ${e.descripcion ? `<p style="margin-top:10px;color:#4a4a4a">${esc(e.descripcion)}</p>` : ''}
   </div>`;
+
+  // Divisiones internas de la escuadra (si la escuadra está dividida)
+  const divisiones = D.divisiones.filter(d => d.id_escuadra === id);
+  if (divisiones.length) {
+    html += `<h2>Divisiones <span class="badge badge-sea">${divisiones.length}</span></h2>`;
+    html += `<p style="color:#6a6a6a;font-size:13px">Esta escuadra está organizada internamente en ${divisiones.length} divisiones.</p>`;
+    html += `<table><thead><tr><th>División</th><th>Jefe</th><th>Insignia</th><th>Buques</th></tr></thead><tbody>`;
+    divisiones.forEach(d => {
+      const buquesDiv = D.pertenencias.filter(pe => pe.id_division === d.id).length;
+      html += `<tr>
+        <td><a href="#division/${esc(d.id)}">${esc(d.nombre)}</a></td>
+        <td>${d.id_jefe_division ? linkPersona(d.id_jefe_division) : '<span class="empty">—</span>'}</td>
+        <td>${d.id_buque_insignia ? linkBuque(d.id_buque_insignia) : '<span class="empty">—</span>'}</td>
+        <td>${buquesDiv || '<span class="empty">—</span>'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
 
   // Mando de la escuadra: cada jefe con su función explícita (Comandante
   // General / Segundo Comandante General), tomada de id_funcion.
