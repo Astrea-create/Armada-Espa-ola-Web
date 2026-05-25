@@ -313,6 +313,7 @@
     <nav>
       <a href="#home">Inicio</a>
       <a href="#quienes">¿Quiénes somos?</a>
+      <a href="#politica">Política de uso</a>
       <a href="#contacto">Contacto</a>
       <a href="#diagnostico" id="nav-diag">Diagnóstico</a>
     </nav>
@@ -322,7 +323,28 @@
 <main><div class="container" id="app"><p>Cargando…</p></div></main>
 
 <footer class="foot">
-  <div class="container">Prototipo · modelo v3 con rutas, pasajeros y datos biográficos</div>
+  <div class="container">
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">
+      <div>
+        <strong style="color:#1e3a5f">Memoria Naval</strong> —
+        Base de datos prosopográfica de la Real Armada Española del siglo XVIII
+      </div>
+      <div style="font-size:12px;color:#6a6a6a">
+        <a href="#quienes" style="color:#6a6a6a">¿Quiénes somos?</a> ·
+        <a href="#politica" style="color:#6a6a6a">Política de uso</a> ·
+        <a href="#contacto" style="color:#6a6a6a">Contacto</a>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #d9d4c8;font-size:11.5px;color:#7a7a7a;line-height:1.5">
+      Contenido publicado bajo licencia
+      <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.es" target="_blank" rel="noopener" style="color:#1e3a5f">
+        Creative Commons Atribución-NoComercial-CompartirIgual 4.0 Internacional (CC BY-NC-SA 4.0)
+      </a>.
+      Cita sugerida: <em>Memoria Naval — La Real Armada Española del siglo XVIII</em>.
+      Algunos retratos son recreaciones ilustrativas generadas por IA; consulta la
+      <a href="#politica" style="color:#1e3a5f">política de uso</a>.
+    </div>
+  </div>
 </footer>
 
 <script type="application/json" id="dataset">__DATASET__</script>
@@ -1086,6 +1108,7 @@ function router() {
     case 'mapa':         return renderMapaGlobal();
     case 'quienes':      return renderQuienes();
     case 'contacto':     return renderContacto();
+    case 'politica':     return renderPolitica();
     case 'diagnostico':  return esAdmin() ? renderDiagnostico() : renderHome();
     default:             return renderHome();
   }
@@ -4091,79 +4114,151 @@ function renderMapaGlobal() {
 function renderQuienes() {
   let html = `<p class="crumbs"><a href="#home">Inicio</a> › ¿Quiénes somos?</p>`;
   html += `<div class="pagina-info">
-    <h1>¿Quiénes somos?</h1>
+    <h1>Memoria Naval</h1>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Memoria Naval es un proyecto de investigación independiente que documenta
+      de forma estructurada la actividad de la Real Armada Española durante el
+      siglo XVIII: las personas que la formaron, los buques que la integraron,
+      las escuadras en que se organizaron y las travesías que realizaron.
+    </p>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Los datos se recopilan a partir de fuentes documentales primarias y
+      secundarias, y se publican como base abierta para uso académico,
+      genealógico e histórico.
+    </p>
 
-    <div class="hueco">
-      <strong>· Qué es este proyecto ·</strong><br>
-      Escribe aquí, con tus palabras, en dos o tres frases: qué es esta base
-      de datos, qué periodo y qué ámbito de la Armada cubre, y qué pretende
-      ofrecer a quien la consulte. (Ej.: «Esta es una base de datos
-      prosopográfica dedicada a…».)
-    </div>
+    <h2 style="margin-top:28px">Trabajo en curso</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      La base de datos está en constante ampliación y revisión. Algunas fichas
+      están más completas que otras, y los cruces entre tablas (rutas,
+      pertenencias a escuadras, destinos, cargas) reflejan el estado actual de
+      la investigación, no una versión definitiva. Por eso conviene tomar
+      cualquier dato concreto como punto de partida para consultar las fuentes
+      originales, no como afirmación cerrada.
+    </p>
 
-    <div class="hueco">
-      <strong>· Qué información reúne ·</strong><br>
-      Describe brevemente qué tipo de personas y de hechos recoge: oficiales,
-      tripulaciones, civiles embarcados, buques, escuadras, travesías,
-      caudales, parentescos… lo que quieras destacar como contenido.
-    </div>
+    <h2 style="margin-top:28px">Retratos e ilustraciones</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Algunas fichas incluyen <strong>retratos ilustrativos generados por
+      inteligencia artificial</strong> cuando no se ha podido localizar un
+      retrato histórico de la persona. Estas imágenes son recreaciones, no
+      documentos de época, y están claramente diferenciadas. Cuando se disponga
+      de un retrato histórico auténtico, sustituye automáticamente al ilustrativo.
+    </p>
 
-    <div class="hueco">
-      <strong>· Fuentes documentales ·</strong><br>
-      Indica de qué archivos, fondos o tipo de documentación proceden los
-      datos. No hace falta una bibliografía completa, pero sí una declaración
-      honesta del origen (archivos históricos, fuentes del periodo, etc.).
-      Esto es lo que da credibilidad al recurso.
-    </div>
-
-    <div class="hueco">
-      <strong>· Criterio y estado del trabajo ·</strong><br>
-      Una frase sobre cómo se tratan los datos y que es un trabajo en curso,
-      en ampliación y revisión continua. (Recomendado para no dar un dato
-      incompleto como definitivo.)
-    </div>
-
-    <div class="hueco">
-      <strong>· Autoría ·</strong><br>
-      Si quieres que el proyecto vaya firmado: tu nombre y tu condición
-      (historiador, investigador independiente, lo que corresponda) y, si
-      procede, una forma sugerida de citarlo. Si lo prefieres reservado,
-      indícalo y se deja sin autoría visible.
-    </div>
-
-    <p style="color:#6a6a6a;font-size:13px;margin-top:20px">
-      Cuando rellenes estos textos y me los pases, los convierto en la
-      redacción final, respetando lo que escribas sin añadir afirmaciones
-      ni fuentes que no me hayas dado.
+    <p style="margin-top:28px">
+      <a href="#politica">Consulta la política de uso de los datos →</a>
     </p>
   </div>`;
   setApp(html);
 }
 
-// Contacto — página con huecos guiados
+// Contacto
 function renderContacto() {
   let html = `<p class="crumbs"><a href="#home">Inicio</a> › Contacto</p>`;
   html += `<div class="pagina-info">
     <h1>Contacto</h1>
 
-    <div class="hueco">
-      <strong>· Vía de contacto ·</strong><br>
-      Decide si quieres ofrecer una forma de contacto (un correo, por
-      ejemplo). En prosopografía es muy valioso, porque otros investigadores
-      te enviarán correcciones y aportaciones, pero te expone públicamente.
-      Escribe aquí el correo u otra vía, o indica que prefieres no incluir
-      ninguna y se retira esta página del menú.
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Si quieres aportar datos, correcciones o documentación sobre alguna
+      persona, buque o travesía documentada en Memoria Naval, escribe a:
+    </p>
+
+    <p style="font-size:17px;margin:18px 0;padding:14px 18px;background:#f7f1e0;border:1px solid #d9c388;border-radius:4px;display:inline-block">
+      <strong>contacto@TUDOMINIO</strong>
+      <br><span style="font-size:12px;color:#6a6a6a">(sustituye este placeholder con tu correo real cuando tengas el dominio)</span>
+    </p>
+
+    <h2 style="margin-top:28px">Aportaciones y correcciones</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Las aportaciones documentadas (con referencia a la fuente: archivo,
+      legajo, expediente, bibliografía) son siempre bienvenidas. La
+      prosopografía mejora cuando muchos ojos miran los mismos datos.
+    </p>
+
+    <h2 style="margin-top:28px">Citas y uso académico</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Para conocer las condiciones de uso de los datos publicados en este
+      sitio, consulta la <a href="#politica">política de uso</a>.
+    </p>
+  </div>`;
+  setApp(html);
+}
+
+// Política de uso — licencia CC BY-NC-SA 4.0
+function renderPolitica() {
+  let html = `<p class="crumbs"><a href="#home">Inicio</a> › Política de uso</p>`;
+  html += `<div class="pagina-info">
+    <h1>Política de uso de los datos</h1>
+
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Memoria Naval es un proyecto académico abierto. Los datos publicados en
+      este sitio están a disposición de cualquier persona interesada bajo las
+      siguientes condiciones.
+    </p>
+
+    <h2 style="margin-top:28px">Licencia</h2>
+    <div style="padding:18px;background:#f7f7f3;border-left:4px solid #1e3a5f;border-radius:2px;margin:14px 0">
+      <p style="margin:0;font-size:15px;line-height:1.6;color:#2a2a2a">
+        Toda la base de datos de Memoria Naval se publica bajo licencia
+        <strong>Creative Commons Atribución-NoComercial-CompartirIgual 4.0
+        Internacional</strong>
+        <br><span style="font-size:13px;color:#5a5a5a">(CC BY-NC-SA 4.0)</span>
+      </p>
+      <p style="margin:10px 0 0;font-size:13px;color:#5a5a5a">
+        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.es" target="_blank" rel="noopener">
+          Ver el texto completo de la licencia →
+        </a>
+      </p>
     </div>
 
-    <div class="hueco">
-      <strong>· Aportaciones y correcciones ·</strong><br>
-      Si abres contacto, un texto breve invitando a enviar correcciones,
-      datos o fuentes, y cómo prefieres recibirlos. (Opcional.)
-    </div>
+    <h2 style="margin-top:28px">Qué puedes hacer</h2>
+    <ul style="font-size:15px;line-height:1.7;color:#3a3a3a;padding-left:20px">
+      <li><strong>Consultar</strong> libremente todos los datos para investigación, genealogía o interés personal.</li>
+      <li><strong>Copiar, redistribuir y adaptar</strong> los datos para fines académicos, educativos y de investigación.</li>
+      <li><strong>Citarlos</strong> en tus propios trabajos, artículos o publicaciones.</li>
+    </ul>
 
-    <p style="color:#6a6a6a;font-size:13px;margin-top:20px">
-      Si decides no ofrecer contacto, dímelo y quito «Contacto» de la barra
-      superior, dejando solo Inicio y ¿Quiénes somos?
+    <h2 style="margin-top:28px">Qué tienes que hacer</h2>
+    <ul style="font-size:15px;line-height:1.7;color:#3a3a3a;padding-left:20px">
+      <li><strong>Atribuir</strong>: indicar la procedencia citando a Memoria Naval con el enlace al sitio.</li>
+      <li><strong>No comercial</strong>: no usar los datos con fines comerciales sin autorización previa por escrito.</li>
+      <li><strong>Compartir igual</strong>: si transformas o construyes sobre estos datos, debes distribuir tu contribución bajo la misma licencia.</li>
+    </ul>
+
+    <h2 style="margin-top:28px">Cómo citar</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Forma sugerida de cita en trabajos académicos:
+    </p>
+    <p style="font-family:Georgia,serif;font-style:italic;padding:14px 18px;background:#fafafa;border-left:3px solid #d9c388;font-size:14px;color:#2a2a2a">
+      Memoria Naval — La Real Armada Española del siglo XVIII. Disponible en
+      [URL del sitio]. Consultado el [fecha].
+    </p>
+
+    <h2 style="margin-top:28px">Estado de los datos</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      La base de datos está en construcción y revisión continua. Algunos
+      registros pueden estar incompletos o sujetos a corrección. Para usos
+      académicos rigurosos se recomienda contrastar los datos con las fuentes
+      primarias originales.
+    </p>
+
+    <h2 style="margin-top:28px">Imágenes</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Las imágenes de retrato que aparecen en algunas fichas son, en su mayoría,
+      <strong>recreaciones ilustrativas generadas mediante inteligencia
+      artificial</strong>. No son documentos históricos, ni se presentan como
+      tales: son herramienta narrativa para facilitar la lectura. Las imágenes
+      que provengan de retratos históricos auténticos (museos, archivos,
+      colecciones públicas) se identifican con su procedencia y su licencia
+      propia, distinta a la de esta base de datos.
+    </p>
+
+    <h2 style="margin-top:28px">Excepciones y permisos especiales</h2>
+    <p style="font-size:15px;line-height:1.6;color:#3a3a3a">
+      Para usos comerciales, ediciones impresas, integración en otras bases
+      de datos o cualquier otra explotación fuera de los términos de la
+      licencia, escribir a <a href="#contacto">contacto</a>.
     </p>
   </div>`;
   setApp(html);

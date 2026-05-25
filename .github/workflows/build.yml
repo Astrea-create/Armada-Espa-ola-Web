@@ -49,6 +49,8 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/index.html
+          # Dominio personalizado: GitHub Pages necesita este archivo en la raíz
+          [ -f CNAME ] && cp CNAME _site/CNAME || true
           # data.json e incidencias.txt se incluyen para poder consultarlos
           [ -f data.json ] && cp data.json _site/data.json || true
           [ -f incidencias.txt ] && cp incidencias.txt _site/incidencias.txt || true
