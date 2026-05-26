@@ -411,6 +411,7 @@ const CAT = {
   causa:           indexBy(D.causas_defuncion, 'id'),
   comision:        indexBy(D.comisiones, 'id'),
   division:        indexBy(D.divisiones, 'id'),
+  nacion:          indexBy(D.naciones, 'id'),
 };
 
 function indexBy(arr, key) {
@@ -546,6 +547,29 @@ function fechaCorta(iso) {
 function rango(ini, fin) {
   if (!ini && !fin) return '<span class="empty">sin fechas</span>';
   return `${ini ? fechaCorta(ini) : '?'} → ${fin ? fechaCorta(fin) : 'sigue'}`;
+}
+
+/**
+ * Formatea la cantidad de una entrada de carga, priorizando peso/unidad_peso
+ * sobre cantidad/unidad cuando ambos están disponibles. La lógica documentada
+ * por el responsable de los datos:
+ *   - Si solo hay cantidad+unidad (ej. "5 Cajón"): usar eso.
+ *   - Si solo hay peso+unidad_peso (ej. "25 libras"): usar eso.
+ *   - Si están ambos: priorizar el peso, que es más informativo
+ *     (los cajones varían de tamaño; las libras son comparables).
+ *
+ * Devuelve el string ya con separador de miles en formato español.
+ */
+function formatCantidadCarga(c) {
+  if (!c) return '';
+  const tienePeso = c.peso != null && c.unidad_peso;
+  const tieneCant = c.cantidad != null && c.unidad;
+  if (tienePeso) return `${c.peso.toLocaleString('es-ES')} ${esc(c.unidad_peso)}`;
+  if (tieneCant) return `${c.cantidad.toLocaleString('es-ES')} ${esc(c.unidad)}`;
+  // Fallback: solo número sin unidad
+  if (c.peso != null)     return c.peso.toLocaleString('es-ES');
+  if (c.cantidad != null) return c.cantidad.toLocaleString('es-ES');
+  return '';
 }
 
 /**
@@ -892,6 +916,36 @@ const linkEscuadra = id => link(CAT.escuadra, id, 'escuadra');
 const linkBatalla  = id => link(CAT.batalla, id, 'batalla');
 const linkComision = id => link(CAT.comision, id, 'comision');
 const linkDivision = id => link(CAT.division, id, 'division');
+const linkNacion   = id => link(CAT.nacion, id, 'nacion');
+
+// Devuelve el nombre de la nación (o "España" si está vacío, asumiendo
+// por defecto). Útil para badges.
+function nombreNacion(idNacion) {
+  if (!idNacion) return 'España';
+  const n = CAT.nacion[idNacion];
+  return n ? n.nombre : idNacion;
+}
+// Color por nación para badges visuales. Si no hay color asignado, gris.
+function colorNacion(idNacion) {
+  const colores = {
+    'NACI00001': '#c83737', // España - rojo carmesí
+    'NACI00002': '#1e3a5f', // Reino Unido - azul marina
+    'NACI00003': '#4a7ac0', // Francia - azul celeste
+    'NACI00004': '#c89030', // Argelia - ocre
+    'NACI00005': '#a8a830', // Marruecos - verde mostaza
+  };
+  return colores[idNacion] || '#7a7a7a';
+}
+// Badge con bandera/color de nación, clicable
+function badgeNacion(idNacion) {
+  if (!idNacion) idNacion = 'NACI00001'; // español por defecto
+  const n = CAT.nacion[idNacion];
+  const nombre = n ? n.nombre : 'España';
+  const color = colorNacion(idNacion);
+  return `<a href="#nacion/${esc(idNacion)}" class="badge"
+    style="background:${color};color:#fff;text-decoration:none"
+    title="${esc(nombre)}">${esc(nombre)}</a>`;
+}
 
 // Resuelve el nombre de una función mirando primero en el catálogo correcto
 // según el prefijo del ID: FBQ### → funciones de buque, FUNC### → funciones generales.
@@ -1111,6 +1165,7 @@ function router() {
     case 'causa':        return renderCausa(parts[1]);
     case 'comision':     return renderComision(parts[1]);
     case 'division':     return renderDivision(parts[1]);
+    case 'nacion':       return renderNacion(parts[1]);
     case 'mapa':         return renderMapaGlobal();
     case 'quienes':      return renderQuienes();
     case 'contacto':     return renderContacto();
@@ -1642,7 +1697,7 @@ function renderPersona(id) {
     </figure>`;
   }
   html += `<span class="kind">Persona · ${esc(p.id)}</span>
-    <h1>${esc(p.nombre)}</h1>`;
+    <h1>${esc(p.nombre)}${p.id_nacion && p.id_nacion !== 'NACI00001' ? ' ' + badgeNacion(p.id_nacion) : ''}</h1>`;
 
   // Profesión civil (si tiene)
   if (p.id_profesion) {
@@ -1936,6 +1991,25 @@ function renderPersona(id) {
     html += `</tbody></table>`;
   } else html += `<div class="empty">Sin destinos de tierra.</div>`;
 
+  // Bajas en batalla documentadas (heridas, prisión, etc.) de esta persona
+  const misBajas = D.bajas_batalla.filter(b => b.id_persona === id);
+  if (misBajas.length) {
+    html += `<h2>Bajas en combate <span class="badge" style="background:#e8c4c4;color:#7a2020">${misBajas.length}</span></h2>`;
+    html += `<table><thead><tr><th>Batalla</th><th>Tipo</th><th>Gravedad</th><th>Buque</th><th>Trasladado a</th><th>Notas</th></tr></thead><tbody>`;
+    misBajas.forEach(b => {
+      const tipoColor = (b.tipo_baja || '').toLowerCase() === 'muerto' ? '#a32d2d' : '#a08030';
+      html += `<tr>
+        <td>${b.id_batalla ? linkBatalla(b.id_batalla) : ''}</td>
+        <td style="color:${tipoColor};font-weight:600">${esc(b.tipo_baja || '')}</td>
+        <td>${esc(b.gravedad || '')}</td>
+        <td>${b.id_buque ? linkBuque(b.id_buque) : ''}</td>
+        <td>${b.id_lugar_traslado ? linkLugar(b.id_lugar_traslado) : ''}</td>
+        <td><small>${esc(b.observaciones || '')}</small></td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
   // Jefaturas de división (si la persona ha mandado alguna)
   const jefDivs = D.divisiones.filter(d => d.id_jefe_division === id);
   if (jefDivs.length) {
@@ -2153,9 +2227,10 @@ function renderBuque(id) {
 
   html += `<div class="detail-head">
     <span class="kind">Buque · ${esc(b.id)}</span>
-    <h1>${esc(b.nombre)}</h1>
+    <h1>${esc(b.nombre)}${b.id_nacion && b.id_nacion !== 'NACI00001' ? ' ' + badgeNacion(b.id_nacion) : ''}</h1>
     <div class="meta-row">
       ${b.tipo ? `<span><strong>${esc(b.tipo)}</strong></span>` : ''}
+      ${b.id_nacion && b.id_nacion !== 'NACI00001' ? `<span>Nación: <strong>${linkNacion(b.id_nacion)}</strong></span>` : ''}
       ${b.id_rama ? `<span>Rama: ${linkRama(b.id_rama)}</span>` : ''}
       ${b.clase ? `<span>Clase: ${esc(b.clase)}</span>` : ''}
       ${b.canones ? `<span>${esc(b.canones)} cañones</span>` : ''}
@@ -2353,13 +2428,40 @@ function renderBuque(id) {
   const combatesBuque = D.participaciones_batalla.filter(p => p.id_buque === id);
   if (combatesBuque.length) {
     html += `<h2>Combates <span class="badge" style="background:#e8c4c4;color:#7a2020">${combatesBuque.length}</span></h2>`;
-    html += `<table><thead><tr><th>Batalla</th><th>Fecha</th><th>Escuadra</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Batalla</th><th>Fecha</th><th>Papel</th><th>Suerte</th><th>Bajas</th></tr></thead><tbody>`;
     combatesBuque.forEach(p => {
       const bat = CAT.batalla[p.id_batalla];
+      const baj = [];
+      if (p.bajas_muertos) baj.push(`${p.bajas_muertos}M`);
+      if (p.bajas_heridos) baj.push(`${p.bajas_heridos}H`);
+      if (p.bajas_prisioneros) baj.push(`${p.bajas_prisioneros}P`);
       html += `<tr>
         <td>${linkBatalla(p.id_batalla)}</td>
         <td>${bat && bat.fecha ? esc(fechaCorta(bat.fecha)) : (p.fecha ? esc(fechaCorta(p.fecha)) : '')}</td>
-        <td>${linkEscuadra(p.id_escuadra)}</td>
+        <td>${esc(p.papel || '')}</td>
+        <td>${esc(p.suerte || '')}</td>
+        <td>${baj.join(' · ')}</td>
+      </tr>`;
+      if (p.observaciones) {
+        html += `<tr><td colspan="5" style="font-size:12px;color:#5a5a5a;font-style:italic;background:#fafafa">${esc(p.observaciones)}</td></tr>`;
+      }
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Bajas individuales de la dotación de este buque
+  const bajasBuque = D.bajas_batalla.filter(b => b.id_buque === id);
+  if (bajasBuque.length) {
+    html += `<h2>Bajas en combate de su dotación <span class="badge" style="background:#e8c4c4;color:#7a2020">${bajasBuque.length}</span></h2>`;
+    html += `<table><thead><tr><th>Persona</th><th>Batalla</th><th>Tipo</th><th>Gravedad</th><th>Notas</th></tr></thead><tbody>`;
+    bajasBuque.forEach(b => {
+      const tipoColor = (b.tipo_baja || '').toLowerCase() === 'muerto' ? '#a32d2d' : '#a08030';
+      html += `<tr>
+        <td>${b.id_persona ? linkPersona(b.id_persona) : '<span class="empty">—</span>'}</td>
+        <td>${b.id_batalla ? linkBatalla(b.id_batalla) : ''}</td>
+        <td style="color:${tipoColor};font-weight:600">${esc(b.tipo_baja || '')}</td>
+        <td>${esc(b.gravedad || '')}</td>
+        <td><small>${esc(b.observaciones || '')}</small></td>
       </tr>`;
     });
     html += `</tbody></table>`;
@@ -2938,8 +3040,7 @@ function renderRuta(id) {
       <th>Mercancía</th><th>Cantidad</th><th>Valor</th><th>Remitente</th><th>Destinatario</th><th>Trayecto</th>
     </tr></thead><tbody>`;
     cargaRuta.forEach(c => {
-      const cantidad = c.cantidad != null
-        ? `${c.cantidad}${c.unidad ? ' ' + esc(c.unidad) : ''}` : '';
+      const cantidad = formatCantidadCarga(c);
       const remit = c.id_persona_remitente ? linkPersona(c.id_persona_remitente)
                  : c.id_jefatura_remitente ? linkJefatura(c.id_jefatura_remitente)
                  : esc(c.remitente || '');
@@ -3192,6 +3293,80 @@ function renderCausa(id) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// Ficha NACIÓN — lista buques, escuadras y personas bajo una misma bandera
+// ════════════════════════════════════════════════════════════════════════
+function renderNacion(id) {
+  const n = CAT.nacion[id];
+  if (!n) { setApp(`<p class="empty">Nación ${esc(id)} no encontrada.</p>`); return; }
+
+  // Filtrar entidades por nación. Para los buques, los que no traen
+  // id_nacion se asumen españoles (NACI00001).
+  const esEspana = id === 'NACI00001';
+  const buques = D.buques.filter(b =>
+    b.id_nacion === id || (esEspana && !b.id_nacion));
+  const escuadras = D.escuadras.filter(e =>
+    e.id_nacion === id || (esEspana && !e.id_nacion));
+  const personas = D.personal.filter(p =>
+    p.id_nacion === id || (esEspana && !p.id_nacion));
+  // Participaciones en batallas donde algo de esta nación intervino
+  // (incluye registros donde el buque pertenece a esta nación)
+  const partsBatalla = D.participaciones_batalla.filter(p => {
+    const b = CAT.buque[p.id_buque];
+    if (!b) return false;
+    return b.id_nacion === id || (esEspana && !b.id_nacion);
+  });
+
+  let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
+    <a href="#listado/naciones">Naciones</a> › ${esc(n.nombre)}</p>`;
+  html += `<div class="detail-head">
+    <span class="kind">Nación · ${esc(n.id)}</span>
+    <h1>${esc(n.nombre)} ${badgeNacion(id)}</h1>
+    <div class="meta-row">
+      <span><strong>${buques.length}</strong> buques</span>
+      <span><strong>${escuadras.length}</strong> escuadras</span>
+      <span><strong>${personas.length}</strong> personas documentadas</span>
+      <span><strong>${partsBatalla.length}</strong> participaciones en batalla</span>
+    </div>
+  </div>`;
+
+  if (escuadras.length) {
+    html += `<h2>Escuadras <span class="badge badge-sea">${escuadras.length}</span></h2>`;
+    escuadras.forEach(e => {
+      html += `<a class="card card-link" href="#escuadra/${esc(e.id)}">
+        <div class="card-title">${esc(e.nombre)}</div>
+        <div class="card-sub">${esc(e.tipo || '')}</div>
+      </a>`;
+    });
+  }
+  if (buques.length) {
+    html += `<h2>Buques <span class="badge badge-sea">${buques.length}</span></h2>`;
+    html += `<table><thead><tr><th>Buque</th><th>Tipo</th><th>Clase</th><th>Cañones</th></tr></thead><tbody>`;
+    buques.forEach(b => {
+      html += `<tr>
+        <td>${linkBuque(b.id)}</td>
+        <td>${esc(b.tipo || '')}</td>
+        <td>${esc(b.clase || '')}</td>
+        <td>${esc(b.canones || '')}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  if (personas.length && personas.length < 80) {
+    // Solo listamos personas si son pocas, para no saturar la página
+    html += `<h2>Personas <span class="badge">${personas.length}</span></h2>`;
+    html += `<table><thead><tr><th>Persona</th></tr></thead><tbody>`;
+    personas.forEach(p => {
+      html += `<tr><td>${linkPersona(p.id)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  } else if (personas.length) {
+    html += `<p style="color:#6a6a6a">Hay <strong>${personas.length}</strong> personas registradas bajo esta nación. Consulta la <a href="#listado/personal">lista completa de personal</a>.</p>`;
+  }
+
+  setApp(html);
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Ficha COMISIÓN — agrupa rutas que forman parte de la misma orden
 // ════════════════════════════════════════════════════════════════════════
 function renderComision(id) {
@@ -3219,19 +3394,35 @@ function renderComision(id) {
     }
   });
 
-  // Totales de carga y caudales con la lógica 6.B
+  // Totales de carga, caudales y tropas con lógica 6.B.
+  // IMPORTANTE: una misma carga puede aparecer en varias rutas de la
+  // comisión a la vez (por ejemplo el azogue Cádiz→Veracruz aparece como
+  // tránsito en la ruta Cádiz→Habana Y como descarga en Habana→Veracruz).
+  // Deduplicamos por `id` para no contar dos veces el mismo cargamento.
   const cargaTotal = [];
   const caudalesTotal = [];
   const tropasTotal = [];
+  const vistosCarga = new Set();
+  const vistosCaudales = new Set();
+  const vistosTropas = new Set();
   rutas.forEach(r => {
     D.carga.forEach(c => {
-      if (rolEnRuta(c, r)) cargaTotal.push({ ...c, _ruta: r });
+      if (rolEnRuta(c, r) && !vistosCarga.has(c.id)) {
+        vistosCarga.add(c.id);
+        cargaTotal.push({ ...c, _ruta: r });
+      }
     });
     D.caudales.forEach(c => {
-      if (rolEnRuta(c, r)) caudalesTotal.push({ ...c, _ruta: r });
+      if (rolEnRuta(c, r) && !vistosCaudales.has(c.id)) {
+        vistosCaudales.add(c.id);
+        caudalesTotal.push({ ...c, _ruta: r });
+      }
     });
     D.transporte_tropas.forEach(t => {
-      if (rolEnRuta(t, r)) tropasTotal.push({ ...t, _ruta: r });
+      if (rolEnRuta(t, r) && !vistosTropas.has(t.id)) {
+        vistosTropas.add(t.id);
+        tropasTotal.push({ ...t, _ruta: r });
+      }
     });
   });
 
@@ -3337,22 +3528,37 @@ function renderComision(id) {
     });
   }
 
-  // Carga total
+  // Carga total — agregada por mercancía. Aplicamos la regla de prioridad
+  // de "peso+unidad_peso sobre cantidad+unidad" item a item; luego sumamos
+  // por unidad efectiva (cada mercancía puede ir mezclada en cajones y libras
+  // en distintos asientos, así que separamos sumas por unidad).
   if (cargaTotal.length) {
     const totalPorMerc = {};
     cargaTotal.forEach(c => {
       const k = c.id_mercancia || 'sin_id';
-      if (!totalPorMerc[k]) totalPorMerc[k] = { items: [], cantidad: 0, unidad: c.unidad };
+      // Decidir qué número y qué unidad usar para ESTA fila
+      const tienePeso = c.peso != null && c.unidad_peso;
+      const tieneCant = c.cantidad != null && c.unidad;
+      let valor = null, unidad = null;
+      if (tienePeso)      { valor = c.peso;     unidad = c.unidad_peso; }
+      else if (tieneCant) { valor = c.cantidad; unidad = c.unidad; }
+      if (!totalPorMerc[k]) totalPorMerc[k] = { items: [], porUnidad: {} };
       totalPorMerc[k].items.push(c);
-      if (typeof c.cantidad === 'number') totalPorMerc[k].cantidad += c.cantidad;
+      if (valor != null && unidad) {
+        if (!totalPorMerc[k].porUnidad[unidad]) totalPorMerc[k].porUnidad[unidad] = 0;
+        totalPorMerc[k].porUnidad[unidad] += valor;
+      }
     });
     html += `<h2>Carga transportada <span class="badge">${cargaTotal.length}</span></h2>`;
     html += `<table><thead><tr><th>Mercancía</th><th>Total</th><th>Cargas</th></tr></thead><tbody>`;
     Object.keys(totalPorMerc).forEach(k => {
       const g = totalPorMerc[k];
+      const totales = Object.keys(g.porUnidad)
+        .map(u => `${g.porUnidad[u].toLocaleString('es-ES')} ${esc(u)}`)
+        .join(' + ');
       html += `<tr>
         <td>${linkMercancia(k)}</td>
-        <td>${g.cantidad ? g.cantidad.toLocaleString('es-ES') + ' ' + esc(g.unidad || '') : '—'}</td>
+        <td>${totales || '—'}</td>
         <td>${g.items.length}</td>
       </tr>`;
     });
@@ -3611,9 +3817,7 @@ function renderPosicion(idBuque, fecha) {
     html += `<h2>Carga transportada <span class="badge">${cargaABordo.length}</span></h2>`;
     html += `<table><thead><tr><th>Mercancía</th><th>Cantidad</th><th>Remitente</th><th>Destinatario</th></tr></thead><tbody>`;
     cargaABordo.forEach(c => {
-      const cantidad = c.cantidad != null
-        ? `${c.cantidad}${c.unidad ? ' ' + esc(c.unidad) : ''}`
-        : '';
+      const cantidad = formatCantidadCarga(c);
       const remit = c.id_persona_remitente ? linkPersona(c.id_persona_remitente)
                  : c.id_jefatura_remitente ? linkJefatura(c.id_jefatura_remitente)
                  : esc(c.remitente || '');
@@ -3706,9 +3910,7 @@ function renderMercancia(id) {
       <th>Ruta</th><th>Cantidad</th><th>Remitente</th><th>Destinatario</th>
     </tr></thead><tbody>`;
     cargasConRuta.forEach(({c, r}) => {
-      const cantidad = c.cantidad != null
-        ? `${c.cantidad}${c.unidad ? ' ' + esc(c.unidad) : ''}`
-        : '';
+      const cantidad = formatCantidadCarga(c);
       const remit = c.id_persona_remitente ? linkPersona(c.id_persona_remitente)
                  : c.id_jefatura_remitente ? linkJefatura(c.id_jefatura_remitente)
                  : esc(c.remitente || '');
@@ -4029,17 +4231,56 @@ function renderBatalla(id) {
   if (!bat) { setApp(`<p class="empty">Batalla ${esc(id)} no encontrada.</p>`); return; }
 
   const parts = D.participaciones_batalla.filter(p => p.id_batalla === id);
-  // Agrupar participantes por escuadra
-  const porEscuadra = {};
+
+  // Agrupar participantes por bando primero, luego por escuadra dentro
+  // de cada bando. Si una participación no tiene bando declarado, se
+  // toma de la nación del buque (NACI00001 = español = propio).
+  function bandoEfectivo(p) {
+    if (p.bando) return p.bando;
+    const b = CAT.buque[p.id_buque];
+    if (!b) return 'desconocido';
+    if (!b.id_nacion || b.id_nacion === 'NACI00001') return 'propio';
+    return 'enemigo'; // por defecto los no españoles son enemigos
+  }
+  const porBando = { 'propio': [], 'aliado': [], 'enemigo': [], 'desconocido': [] };
   parts.forEach(p => {
-    const k = p.id_escuadra || '(sin escuadra)';
-    (porEscuadra[k] = porEscuadra[k] || []).push(p);
+    const b = bandoEfectivo(p);
+    if (!porBando[b]) porBando[b] = [];
+    porBando[b].push(p);
   });
-  // Buques dados de baja en esta batalla
-  const bajasAqui = D.buques.filter(b => b.id_baja_en_batalla === id);
+
+  // Totales de bajas agregadas
+  const totalBajas = { muertos: 0, heridos: 0, prisioneros: 0 };
+  parts.forEach(p => {
+    if (p.bajas_muertos) totalBajas.muertos += p.bajas_muertos;
+    if (p.bajas_heridos) totalBajas.heridos += p.bajas_heridos;
+    if (p.bajas_prisioneros) totalBajas.prisioneros += p.bajas_prisioneros;
+  });
+
+  // Bajas individuales (personas) en esta batalla
+  const bajasIndiv = D.bajas_batalla.filter(b => b.id_batalla === id);
+  const bajasIndivPorTipo = {};
+  bajasIndiv.forEach(b => {
+    const k = (b.tipo_baja || 'sin tipo').toLowerCase();
+    (bajasIndivPorTipo[k] = bajasIndivPorTipo[k] || []).push(b);
+  });
+
+  // Buques dados de baja en esta batalla (por motivo_baja en BUQUES)
+  const bajasBuques = D.buques.filter(b => b.id_baja_en_batalla === id);
 
   let html = `<p class="crumbs"><a href="#home">Inicio</a> ›
     <a href="#listado/batallas">Batallas</a> › ${esc(bat.nombre)}</p>`;
+
+  // Cabecera con resultado destacado
+  const colorResultado = (r) => {
+    if (!r) return null;
+    const rl = r.toLowerCase();
+    if (rl.includes('victoria española') || rl.includes('victoria propia')) return '#5a8a4a';
+    if (rl.includes('derrota')) return '#a32d2d';
+    if (rl.includes('tablas') || rl.includes('indeciso')) return '#a08030';
+    return '#5a5a5a';
+  };
+  const colR = colorResultado(bat.resultado);
 
   html += `<div class="detail-head">
     <span class="kind">Batalla · ${esc(bat.id)}</span>
@@ -4047,9 +4288,24 @@ function renderBatalla(id) {
     <div class="meta-row">
       ${bat.fecha ? `<span><strong>${fechaCorta(bat.fecha)}</strong></span>` : ''}
       ${bat.guerra ? `<span>${esc(bat.guerra)}</span>` : ''}
+      ${bat.tipo ? `<span><strong>${esc(bat.tipo)}</strong></span>` : ''}
       ${bat.latitud != null ? `<span>${bat.latitud.toFixed(4)}, ${bat.longitud.toFixed(4)}</span>` : ''}
     </div>
+    ${bat.resultado ? `<p style="margin-top:10px"><strong>Resultado:</strong> <span style="color:${colR};font-weight:600">${esc(bat.resultado)}</span></p>` : ''}
   </div>`;
+
+  // Resumen de bajas y fuerzas
+  const resumenBlocks = [];
+  if (parts.length) resumenBlocks.push(`${parts.length} buques`);
+  if (totalBajas.muertos)     resumenBlocks.push(`<strong>${totalBajas.muertos}</strong> muertos`);
+  if (totalBajas.heridos)     resumenBlocks.push(`<strong>${totalBajas.heridos}</strong> heridos`);
+  if (totalBajas.prisioneros) resumenBlocks.push(`<strong>${totalBajas.prisioneros}</strong> prisioneros`);
+  if (bajasBuques.length)     resumenBlocks.push(`<strong>${bajasBuques.length}</strong> buques perdidos`);
+  if (resumenBlocks.length) {
+    html += `<div class="card" style="background:#eef4fa;border-color:#cfd9e3;margin:10px 0">
+      <div class="card-sub">${resumenBlocks.join(' · ')}</div>
+    </div>`;
+  }
 
   // Mapa de la batalla
   if (bat.latitud != null && bat.longitud != null) {
@@ -4062,39 +4318,90 @@ function renderBatalla(id) {
     }], { zoom: 6 });
   }
 
-  // Fuerzas participantes, agrupadas por escuadra
-  html += `<h2>Buques participantes <span class="badge badge-sea">${parts.length}</span></h2>`;
-  if (parts.length) {
-    Object.keys(porEscuadra).forEach(eid => {
+  // Helper para pintar una tabla de buques agrupados por escuadra
+  function tablaBuquesPorEscuadra(items) {
+    const porEsc = {};
+    items.forEach(p => {
+      const k = p.id_escuadra || '(sin escuadra)';
+      (porEsc[k] = porEsc[k] || []).push(p);
+    });
+    let h = '';
+    Object.keys(porEsc).forEach(eid => {
       const e = CAT.escuadra[eid];
-      html += `<h3 style="margin-top:16px;color:#1a4060">${e ? linkEscuadra(eid) : esc(eid)} <span class="badge">${porEscuadra[eid].length}</span></h3>`;
-      html += `<table><thead><tr><th>Buque</th><th>Tipo</th><th>Comandante (ese día)</th><th>Suerte</th></tr></thead><tbody>`;
-      porEscuadra[eid].forEach(p => {
+      h += `<h4 style="margin-top:14px;color:#1a4060">${e ? linkEscuadra(eid) : esc(eid)} <span class="badge">${porEsc[eid].length}</span></h4>`;
+      h += `<table><thead><tr><th>Buque</th><th>Tipo</th><th>Papel</th><th>Comandante</th><th>Suerte</th><th>Bajas</th></tr></thead><tbody>`;
+      porEsc[eid].forEach(p => {
         const b = CAT.buque[p.id_buque];
-        // Comandante inferido por destinos de mar en la fecha de la batalla
         const com = D.destinos_mar.find(d => d.id_buque === p.id_buque &&
           d.id_funcion_buque === 'FBQ001' &&
           rangoCubre(d.fecha_toma_mando || d.fecha_real_orden,
                      d.fecha_cese_efectiva || d.fecha_cese_orden || d.fecha_cese_implicita, bat.fecha));
-        const baja = b && b.id_baja_en_batalla === id;
-        html += `<tr>
-          <td>${linkBuque(p.id_buque)}</td>
+        // Bajas resumidas
+        const baj = [];
+        if (p.bajas_muertos) baj.push(`${p.bajas_muertos}M`);
+        if (p.bajas_heridos) baj.push(`${p.bajas_heridos}H`);
+        if (p.bajas_prisioneros) baj.push(`${p.bajas_prisioneros}P`);
+        // Suerte: del campo suerte, o si no del motivo_baja del buque si fue baja aquí
+        let suerteTxt = p.suerte;
+        if (!suerteTxt && b && b.id_baja_en_batalla === id) suerteTxt = b.motivo_baja || 'baja';
+        const suerteHTML = suerteTxt
+          ? `<span style="color:${suerteTxt.toLowerCase().includes('hund')||suerteTxt.toLowerCase().includes('captur')?'#a32d2d':'#3a3a3a'}">${esc(suerteTxt)}</span>`
+          : '<span class="empty">—</span>';
+        h += `<tr>
+          <td>${linkBuque(p.id_buque)}${b && b.id_nacion && b.id_nacion !== 'NACI00001' ? ' ' + badgeNacion(b.id_nacion) : ''}</td>
           <td>${esc((b && b.tipo) || '')}</td>
+          <td>${esc(p.papel || '')}</td>
           <td>${com ? linkPersona(com.id_persona) : '<span class="empty">—</span>'}</td>
-          <td>${baja ? '<span style="color:#a32d2d;font-weight:600">' + esc(b.motivo_baja || 'baja en combate') + '</span>' : '<span class="empty">sobrevivió</span>'}</td>
+          <td>${suerteHTML}</td>
+          <td>${baj.length ? baj.join(' · ') : ''}</td>
         </tr>`;
+        if (p.observaciones) {
+          h += `<tr><td colspan="6" style="font-size:12px;color:#5a5a5a;font-style:italic;background:#fafafa">${esc(p.observaciones)}</td></tr>`;
+        }
       });
-      html += `</tbody></table>`;
+      h += `</tbody></table>`;
     });
-  } else {
-    html += `<div class="empty">Sin buques participantes documentados.</div>`;
+    return h;
   }
 
-  // Bajas en esta batalla (resumen destacado)
-  if (bajasAqui.length) {
-    html += `<h2>Buques perdidos en esta acción <span class="badge" style="background:#e8c4c4;color:#7a2020">${bajasAqui.length}</span></h2>`;
+  // Bloques por bando
+  const cabeceraBando = {
+    'propio':      { color: '#1a4060', label: 'Bando español', icono: '⚓' },
+    'aliado':      { color: '#4a7ac0', label: 'Bando aliado',  icono: '🤝' },
+    'enemigo':     { color: '#a32d2d', label: 'Bando enemigo', icono: '⚔️' },
+    'desconocido': { color: '#7a7a7a', label: 'Bando no determinado', icono: '?' },
+  };
+  ['propio','aliado','enemigo','desconocido'].forEach(b => {
+    if (!porBando[b] || !porBando[b].length) return;
+    const cab = cabeceraBando[b];
+    html += `<h2 style="color:${cab.color};border-bottom:2px solid ${cab.color};padding-bottom:4px">${cab.icono} ${cab.label} <span class="badge badge-sea">${porBando[b].length}</span></h2>`;
+    html += tablaBuquesPorEscuadra(porBando[b]);
+  });
+
+  // Bajas humanas individuales documentadas
+  if (bajasIndiv.length) {
+    html += `<h2>Bajas humanas documentadas <span class="badge" style="background:#e8c4c4;color:#7a2020">${bajasIndiv.length}</span></h2>`;
+    html += `<p style="color:#6a6a6a;font-size:13px">Personas identificadas nominalmente. Los totales agregados por buque aparecen en el cuadro de fuerzas, arriba.</p>`;
+    html += `<table><thead><tr><th>Persona</th><th>Tipo</th><th>Gravedad</th><th>Buque</th><th>Trasladado a</th><th>Notas</th></tr></thead><tbody>`;
+    bajasIndiv.forEach(b => {
+      const tipoColor = (b.tipo_baja || '').toLowerCase() === 'muerto' ? '#a32d2d' : '#a08030';
+      html += `<tr>
+        <td>${b.id_persona ? linkPersona(b.id_persona) : '<span class="empty">—</span>'}</td>
+        <td style="color:${tipoColor};font-weight:600">${esc(b.tipo_baja || '')}</td>
+        <td>${esc(b.gravedad || '')}</td>
+        <td>${b.id_buque ? linkBuque(b.id_buque) : ''}</td>
+        <td>${b.id_lugar_traslado ? linkLugar(b.id_lugar_traslado) : ''}</td>
+        <td><small>${esc(b.observaciones || '')}</small></td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Buques perdidos en esta acción (por motivo_baja en BUQUES)
+  if (bajasBuques.length) {
+    html += `<h2>Buques perdidos en esta acción <span class="badge" style="background:#e8c4c4;color:#7a2020">${bajasBuques.length}</span></h2>`;
     html += `<table><thead><tr><th>Buque</th><th>Fecha de baja</th><th>Circunstancia</th></tr></thead><tbody>`;
-    bajasAqui.forEach(b => {
+    bajasBuques.forEach(b => {
       html += `<tr>
         <td>${linkBuque(b.id)}</td>
         <td>${b.fecha_baja ? esc(fechaCorta(b.fecha_baja)) : ''}</td>
@@ -4103,6 +4410,7 @@ function renderBatalla(id) {
     });
     html += `</tbody></table>`;
   }
+
 
   // Caídos en combate: personas con id_batalla_defuncion = esta batalla
   const caidos = D.personal.filter(per => per.id_batalla_defuncion === id);

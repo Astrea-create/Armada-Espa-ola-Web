@@ -188,6 +188,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
     D["personal"] = filas(hoja(xl_per, "PERSONAL_CLAUDE.xlsx", "PERSONAL"), {
         "id":                    ("id_persona",           limpia),
         "nombre":                ("nombre_persona",       limpia),
+        "id_nacion":             ("id_nacion",            limpia),
         "fecha_nacimiento":      ("fecha_nacimiento",     fecha_iso),
         "id_lugar_nacimiento":   ("id_lugar_nacimiento",  limpia),
         "fecha_defuncion":       ("fecha_defuncion",      fecha_iso),
@@ -327,6 +328,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id":                       ("id_buque",                 limpia),
         "nombre":                   ("nombre_buque",             limpia),
         "tipo":                     ("tipo_buque",               limpia),
+        "id_nacion":                ("id_nacion",                limpia),
         "id_rama":                  ("id_rama",                  limpia),
         "clase":                    ("clase",                    limpia),
         "canones":                  ("n_canones",                limpia),
@@ -473,6 +475,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id_buque":            ("id_buque",            limpia),
         "id_escuadra":         ("id_escuadra",         limpia),
         "id_division":         ("id_division",         limpia),
+        "id_nacion":           ("id_nacion",           limpia),
         "funcion_en_escuadra": ("funcion_en_escuadra", limpia),
         "insignia":            ("insignia",            limpia),
         "fecha_alta":          ("fecha_alta",          fecha_iso),
@@ -489,15 +492,45 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "guerra":    ("Guerra",         limpia),
         "latitud":   ("Latitud",        to_float),
         "longitud":  ("Longitud",       to_float),
+        "resultado": ("resultado",      limpia),
+        "tipo":      ("tipo",           limpia),
     })
 
     # ── PARTICIPACIONES EN BATALLA ─────────────────────────────────────────
+    # bando: relativo a España siempre (propio / aliado / enemigo)
+    # papel: tipo de acción del buque en la batalla (combate naval, bombardeo,
+    #        desembarco, transporte, apoyo de fuego, exploración, etc.)
+    # suerte: estado final del buque (intacto, dañado, capturado, hundido,
+    #         varado, incendiado, fugado, rendido)
     D["participaciones_batalla"] = filas(hoja(xl_buq, "BUQUE_CLAUDE.xlsx", "Participación Batalla"), {
-        "id":          ("id_participacion_batalla", limpia),
-        "id_buque":    ("id_buque",                 limpia),
-        "id_escuadra": ("id_escuadra",              limpia),
-        "id_batalla":  ("id_batalla",               limpia),
-        "fecha":       ("fecha",                    fecha_iso),
+        "id":                ("id_participacion_batalla", limpia),
+        "id_buque":          ("id_buque",                 limpia),
+        "id_escuadra":       ("id_escuadra",              limpia),
+        "id_batalla":        ("id_batalla",               limpia),
+        "bando":             ("bando",                    limpia),
+        "papel":             ("papel",                    limpia),
+        "bajas_muertos":     ("bajas_muertos",            to_float),
+        "bajas_heridos":     ("bajas_heridos",            to_float),
+        "bajas_prisioneros": ("bajas_prisioneros",        to_float),
+        "suerte":            ("suerte",                   limpia),
+        "fecha":             ("fecha",                    fecha_iso),
+        "observaciones":     ("observaciones",            limpia),
+    })
+
+    # ── BAJAS EN BATALLA ───────────────────────────────────────────────────
+    # Personas individuales heridas, muertas, prisioneras o desaparecidas
+    # en una batalla concreta. Complementa los totales agregados que ya
+    # están en participaciones_batalla.bajas_muertos/heridos/prisioneros.
+    # Una persona puede aparecer varias veces a lo largo de su carrera.
+    D["bajas_batalla"] = filas(hoja(xl_buq, "BUQUE_CLAUDE.xlsx", "baja batalla"), {
+        "id":                ("id_baja_batalla",   limpia),
+        "id_batalla":        ("id_batalla",        limpia),
+        "id_buque":          ("id_buque",          limpia),
+        "id_persona":        ("id_persona",        limpia),
+        "tipo_baja":         ("tipo_baja",         limpia),
+        "gravedad":          ("gravedad",          limpia),
+        "id_lugar_traslado": ("id_lugar_traslado", limpia),
+        "observaciones":     ("observaciones",     limpia),
     })
 
     # ── LUGARES ────────────────────────────────────────────────────────────
@@ -533,6 +566,14 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "id":     ("id_causa_defuncion",     limpia),
         "nombre": ("nombre_causa_defuncion", limpia),
         "tipo":   ("tipo",                   limpia),
+    })
+
+    # ── NACIONES (catálogo) ────────────────────────────────────────────────
+    # Banderas bajo las que operan buques, escuadras y personas. Si una fila
+    # no trae id_nacion se asume España para no romper retrocompatibilidad.
+    D["naciones"] = filas(hoja(xl_lug, "LUGAR_CLAUDE.xlsx", "Nacion", "Naciones"), {
+        "id":     ("id_nacion",     limpia),
+        "nombre": ("nombre_nacion", limpia),
     })
 
     # ── MERCANCÍAS Y CATÁLOGOS ASOCIADOS ───────────────────────────────────
@@ -603,6 +644,7 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "nombre":              ("nombre_escuadra",     limpia),
         "id_buque_insignia":   ("id_buque_insignia",   limpia),
         "tipo":                ("tipo",                limpia),
+        "id_nacion":           ("id_nacion",           limpia),
         "fecha_constitucion":  ("fecha_constitucion",  fecha_iso),
         "fecha_disolucion":    ("fecha_disolucion",    fecha_iso),
         "descripcion":         ("descripcion",         limpia),
