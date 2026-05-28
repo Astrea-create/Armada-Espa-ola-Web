@@ -485,15 +485,20 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
     })
 
     # ── BATALLAS ───────────────────────────────────────────────────────────
+    # Una batalla puede durar más de un día (asedios, bombardeos prolongados,
+    # Gran Sitio de Gibraltar...). Internamente conservamos `fecha` (alias
+    # de inicio) para compatibilidad con código previo, y `fecha_fin` aparte.
     D["batallas"] = filas(hoja(xl_lug, "LUGAR_CLAUDE.xlsx", "BATALLA"), {
-        "id":        ("id_batalla",     limpia),
-        "nombre":    ("nombre_batalla", limpia),
-        "fecha":     ("fecha",          fecha_iso),
-        "guerra":    ("Guerra",         limpia),
-        "latitud":   ("Latitud",        to_float),
-        "longitud":  ("Longitud",       to_float),
-        "resultado": ("resultado",      limpia),
-        "tipo":      ("tipo",           limpia),
+        "id":           ("id_batalla",     limpia),
+        "nombre":       ("nombre_batalla", limpia),
+        "fecha":        ("fecha_inicio",   fecha_iso),  # alias retro-compatible
+        "fecha_inicio": ("fecha_inicio",   fecha_iso),
+        "fecha_fin":    ("fecha_fin",      fecha_iso),
+        "guerra":       ("Guerra",         limpia),
+        "latitud":      ("Latitud",        to_float),
+        "longitud":     ("Longitud",       to_float),
+        "resultado":    ("resultado",      limpia),
+        "tipo":         ("tipo",           limpia),
     })
 
     # ── PARTICIPACIONES EN BATALLA ─────────────────────────────────────────
@@ -502,6 +507,8 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
     #        desembarco, transporte, apoyo de fuego, exploración, etc.)
     # suerte: estado final del buque (intacto, dañado, capturado, hundido,
     #         varado, incendiado, fugado, rendido)
+    # Una participación puede tener su propio rango de fechas dentro de la
+    # batalla — un buque puede entrar y salir del sitio en momentos concretos.
     D["participaciones_batalla"] = filas(hoja(xl_buq, "BUQUE_CLAUDE.xlsx", "Participación Batalla"), {
         "id":                ("id_participacion_batalla", limpia),
         "id_buque":          ("id_buque",                 limpia),
@@ -513,7 +520,9 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
         "bajas_heridos":     ("bajas_heridos",            to_float),
         "bajas_prisioneros": ("bajas_prisioneros",        to_float),
         "suerte":            ("suerte",                   limpia),
-        "fecha":             ("fecha",                    fecha_iso),
+        "fecha":             ("fecha_inicio",             fecha_iso),  # alias
+        "fecha_inicio":      ("fecha_inicio",             fecha_iso),
+        "fecha_fin":         ("fecha_fin",                fecha_iso),
         "observaciones":     ("observaciones",            limpia),
     })
 

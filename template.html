@@ -550,6 +550,26 @@ function rango(ini, fin) {
 }
 
 /**
+ * Formatea el rango de fechas de una batalla o participación de batalla.
+ * Reglas:
+ *   - Si solo hay fecha_inicio (o si fecha_fin = fecha_inicio): "15 ago 1782"
+ *   - Si hay rango distinto: "1 ago 1783 → 9 ago 1783 · 9 días"
+ *   - Sin fechas: cadena vacía
+ * Calcula la duración inclusiva (un día = 1 día, no 0).
+ */
+function formatRangoBatalla(fechaIni, fechaFin) {
+  if (!fechaIni && !fechaFin) return '';
+  if (!fechaFin || fechaFin === fechaIni) return fechaCorta(fechaIni);
+  if (!fechaIni) return '? → ' + fechaCorta(fechaFin);
+  // Cálculo de duración inclusiva
+  const ini = new Date(fechaIni);
+  const fin = new Date(fechaFin);
+  if (isNaN(ini) || isNaN(fin)) return fechaCorta(fechaIni) + ' → ' + fechaCorta(fechaFin);
+  const dias = Math.round((fin - ini) / (1000*60*60*24)) + 1;
+  return `${fechaCorta(fechaIni)} → ${fechaCorta(fechaFin)} · ${dias} día${dias===1?'':'s'}`;
+}
+
+/**
  * Formatea la cantidad de una entrada de carga, priorizando peso/unidad_peso
  * sobre cantidad/unidad cuando ambos están disponibles. La lógica documentada
  * por el responsable de los datos:
@@ -586,9 +606,35 @@ function rangoCubre(ini, fin, fecha) {
 // ¿Se solapan dos rangos cerrados? Cualquier null significa "abierto":
 // aIni=null → "desde siempre"; aFin=null → "hasta hoy/siempre". Útil cuando
 // un destino o pertenencia no tiene fecha de cese registrada.
+/**
+ * Devuelve true si dos rangos de fechas [aIni..aFin] y [bIni..bFin] se solapan.
+ *
+ * Tolera fechas de granularidad mixta: un año suelto como "1758" se interpreta
+ * como todo el año (1758-01-01 → 1758-12-31). "1758-06" se interpreta como ese
+ * mes entero. Esto importa cuando se cruzan datos con distintos niveles de
+ * precisión (mandos cuyo cese se conoce solo a nivel de año, batallas con
+ * fecha exacta del día).
+ */
 function rangosSeSolapan(aIni, aFin, bIni, bFin) {
-  if (aIni && bFin && aIni > bFin) return false;
-  if (bIni && aFin && bIni > aFin) return false;
+  // Expandir fechas parciales al inicio o al final del periodo según
+  // sea fecha de comienzo (esExtremoIni=true) o de fin.
+  function expandir(f, esExtremoIni) {
+    if (!f) return null;
+    // YYYY o YYYY-MM o YYYY-MM-DD
+    if (/^\d{4}$/.test(f))    return esExtremoIni ? f + '-01-01' : f + '-12-31';
+    if (/^\d{4}-\d{2}$/.test(f)) {
+      // Último día del mes: usamos 31 como cota superior (rangosSeSolapan
+      // tolera fechas inexistentes como 31 feb porque solo compara strings)
+      return esExtremoIni ? f + '-01' : f + '-31';
+    }
+    return f;
+  }
+  const a1 = expandir(aIni, true);
+  const a2 = expandir(aFin, false);
+  const b1 = expandir(bIni, true);
+  const b2 = expandir(bFin, false);
+  if (a1 && b2 && a1 > b2) return false;
+  if (b1 && a2 && b1 > a2) return false;
   return true;
 }
 
@@ -683,25 +729,35 @@ function agrupaPosicionesPorFormacion(posiciones, coloresBuque) {
 
     const fechaTxt = p0.fecha ? '<br>' + fechaCorta(p0.fecha) : '';
     const navTxt = p0.navegacion ? '<br>' + esc2(p0.navegacion) : '';
-    // Enlace: a la ruta de la escuadra que cubre esta fecha; si no hay
-    // ninguna ruta que la cubra, a la ficha de la escuadra. Nunca a una
-    // ficha de posición de buque (que para escuadra pura no existe).
-    let destino;
-    const rutaEsc = D.rutas.find(r => r.id_escuadra === eid &&
-      rangoCubre(r.fecha_partida, r.fecha_arribada, p0.fecha));
-    if (rutaEsc) {
-      destino = `#ruta/${encodeURIComponent(rutaEsc.id)}`;
+    // Si alguna posición del grupo tiene id_batalla rellenado, el popup
+    // prioriza enlazar a la batalla: ese día hubo combate aquí. Si no, el
+    // comportamiento normal: ruta de la escuadra que cubre la fecha, o
+    // ficha de la escuadra. Nunca a una ficha de posición individual cuando
+    // se trata de escuadra pura.
+    const conBatalla = lista.find(x => x.id_batalla);
+    let destino, badgeBatalla = '';
+    if (conBatalla) {
+      const bat = CAT.batalla[conBatalla.id_batalla];
+      destino = `#batalla/${encodeURIComponent(conBatalla.id_batalla)}`;
+      badgeBatalla = bat
+        ? `<br><strong style="color:#a32d2d">⚔️ ${esc2(bat.nombre)}</strong>`
+        : `<br><strong style="color:#a32d2d">⚔️ ${esc2(conBatalla.id_batalla)}</strong>`;
     } else {
-      destino = `#escuadra/${encodeURIComponent(eid)}`;
+      const rutaEsc = D.rutas.find(r => r.id_escuadra === eid &&
+        rangoCubre(r.fecha_partida, r.fecha_arribada, p0.fecha));
+      destino = rutaEsc
+        ? `#ruta/${encodeURIComponent(rutaEsc.id)}`
+        : `#escuadra/${encodeURIComponent(eid)}`;
     }
     const verLink = `<br><a href="${destino}">Ver →</a>`;
 
-    const colorRef = (coloresBuque && (coloresBuque[idInsignia] || coloresBuque[p0.id_buque])) || '#1e3a5f';
+    const colorRef = conBatalla ? '#a32d2d'
+                   : (coloresBuque && (coloresBuque[idInsignia] || coloresBuque[p0.id_buque])) || '#1e3a5f';
     puntos.push({
       lat: p0.latitud, lon: p0.longitud,
-      popup: cab + fechaTxt + listaHtml + navTxt + verLink,
+      popup: cab + badgeBatalla + fechaTxt + listaHtml + navTxt + verLink,
       color: colorRef,
-      size: orden.length > 1 ? 7 : 5,
+      size: conBatalla ? 8 : (orden.length > 1 ? 7 : 5),
       _esFormacion: true,
       _idInsignia: idInsignia,
       _fecha: p0.fecha,
@@ -709,17 +765,32 @@ function agrupaPosicionesPorFormacion(posiciones, coloresBuque) {
     });
   }
 
-  // Posiciones sueltas (sin escuadra): punto individual normal
+  // Posiciones sueltas (sin escuadra): punto individual normal. Si la
+  // posición trae id_batalla, el popup también lleva a la batalla.
   sueltas.forEach(p => {
     const b = CAT.buque[p.id_buque];
+    let destino, badgeBatalla = '', color, size = 4;
+    if (p.id_batalla) {
+      const bat = CAT.batalla[p.id_batalla];
+      destino = `#batalla/${encodeURIComponent(p.id_batalla)}`;
+      badgeBatalla = bat
+        ? `<br><strong style="color:#a32d2d">⚔️ ${esc2(bat.nombre)}</strong>`
+        : `<br><strong style="color:#a32d2d">⚔️ ${esc2(p.id_batalla)}</strong>`;
+      color = '#a32d2d';
+      size = 8;
+    } else {
+      destino = `#posicion/${encodeURIComponent(p.id_buque)}/${encodeURIComponent(p.fecha)}`;
+      color = (coloresBuque && coloresBuque[p.id_buque]) || '#a32d2d';
+    }
     puntos.push({
       lat: p.latitud, lon: p.longitud,
       popup: `<strong>${esc2(b ? b.nombre : p.id_buque)}</strong>`
+           + badgeBatalla
            + (p.fecha ? '<br>' + fechaCorta(p.fecha) : '')
            + (p.navegacion ? '<br>' + esc2(p.navegacion) : '')
-           + `<br><a href="#posicion/${encodeURIComponent(p.id_buque)}/${encodeURIComponent(p.fecha)}">Ver →</a>`,
-      color: (coloresBuque && coloresBuque[p.id_buque]) || '#a32d2d',
-      size: 4,
+           + `<br><a href="${destino}">Ver →</a>`,
+      color: color,
+      size: size,
     });
   });
 
@@ -1517,15 +1588,19 @@ function renderListado(tipo) {
   }
   else if (tipo === 'batallas') {
     html += `<h1>Batallas (${D.batallas.length})</h1>`;
-    html += `<p style="color:#6a6a6a">Combates y acciones navales documentados.</p>`;
-    html += `<table><thead><tr><th>ID</th><th>Nombre</th><th>Fecha</th><th>Guerra</th><th>Buques</th></tr></thead><tbody>`;
-    sortByDate(D.batallas, 'fecha').forEach(b => {
+    html += `<p style="color:#6a6a6a">Combates y acciones navales documentados. Las que duran más de un día (asedios, bombardeos prolongados) muestran el rango y la duración.</p>`;
+    html += `<table><thead><tr><th>ID</th><th>Nombre</th><th>Fecha</th><th>Tipo</th><th>Guerra</th><th>Resultado</th><th>Buques</th></tr></thead><tbody>`;
+    sortByDate(D.batallas, 'fecha_inicio', 'fecha').forEach(b => {
       const np = D.participaciones_batalla.filter(p => p.id_batalla === b.id).length;
+      const ini = b.fecha_inicio || b.fecha;
+      const fechaTxt = formatRangoBatalla(ini, b.fecha_fin) || '—';
       html += `<tr>
         <td><code>${esc(b.id)}</code></td>
         <td><a href="#batalla/${esc(b.id)}">${esc(b.nombre)}</a></td>
-        <td>${b.fecha ? esc(fechaCorta(b.fecha)) : '<span class="empty">—</span>'}</td>
+        <td>${esc(fechaTxt)}</td>
+        <td>${esc(b.tipo || '')}</td>
         <td>${esc(b.guerra || '')}</td>
+        <td>${esc(b.resultado || '')}</td>
         <td>${np || '<span class="empty">—</span>'}</td>
       </tr>`;
     });
@@ -1991,6 +2066,127 @@ function renderPersona(id) {
     html += `</tbody></table>`;
   } else html += `<div class="empty">Sin destinos de tierra.</div>`;
 
+  // Combates en los que participó esta persona. Tres vías:
+  //  (1) Estaba destinado en un buque (DESTINO_MAR) que participó en la
+  //      batalla durante el rango.
+  //  (2) Estaba al mando de la escuadra (MANDOS_ESCUADRA) que participó.
+  //  (3) Estaba en la plana mayor de la escuadra (PLANA_MAYOR_ESCUADRA).
+  //
+  // Cada origen se anota en `via` para que la tabla muestre por qué aparece
+  // la persona en esa batalla (buque concreto vs todo el mando).
+  const combatesPersona = [];
+
+  // Vía 1: destinos en buque
+  D.destinos_mar
+    .filter(d => d.id_persona === id)
+    .forEach(d => {
+      const dIni = d.fecha_toma_mando || d.fecha_real_orden;
+      const dFin = d.fecha_cese_efectiva || d.fecha_cese_orden || d.fecha_cese_implicita;
+      D.participaciones_batalla
+        .filter(pb => pb.id_buque === d.id_buque)
+        .forEach(pb => {
+          const bat = CAT.batalla[pb.id_batalla];
+          const bIni = pb.fecha_inicio || pb.fecha || (bat && (bat.fecha_inicio || bat.fecha));
+          const bFin = pb.fecha_fin || (bat && bat.fecha_fin) || bIni;
+          if (rangosSeSolapan(dIni, dFin, bIni, bFin)) {
+            combatesPersona.push({ destino: d, participacion: pb, batalla: bat, via: 'buque' });
+          }
+        });
+    });
+
+  // Vía 2: mandos de escuadra
+  D.mandos_escuadra
+    .filter(m => m.id_persona === id)
+    .forEach(m => {
+      const mIni = m.fecha_toma_mando || m.fecha_real_orden;
+      const mFin = m.fecha_cese_efectiva || m.fecha_cese_orden || m.fecha_cese_real_orden || m.fecha_cese_implicita;
+      D.participaciones_batalla
+        .filter(pb => pb.id_escuadra === m.id_escuadra)
+        .forEach(pb => {
+          const bat = CAT.batalla[pb.id_batalla];
+          const bIni = pb.fecha_inicio || pb.fecha || (bat && (bat.fecha_inicio || bat.fecha));
+          const bFin = pb.fecha_fin || (bat && bat.fecha_fin) || bIni;
+          if (rangosSeSolapan(mIni, mFin, bIni, bFin)) {
+            combatesPersona.push({ mando: m, participacion: pb, batalla: bat, via: 'escuadra' });
+          }
+        });
+    });
+
+  // Vía 3: plana mayor de escuadra (oficiales en estado mayor)
+  D.plana_mayor_escuadra
+    .filter(p => p.id_persona === id)
+    .forEach(p => {
+      const pIni = p.fecha_toma_mando || p.fecha_real_orden;
+      const pFin = p.fecha_cese_efectiva || p.fecha_cese_orden || p.fecha_cese_implicita;
+      D.participaciones_batalla
+        .filter(pb => pb.id_escuadra === p.id_escuadra)
+        .forEach(pb => {
+          const bat = CAT.batalla[pb.id_batalla];
+          const bIni = pb.fecha_inicio || pb.fecha || (bat && (bat.fecha_inicio || bat.fecha));
+          const bFin = pb.fecha_fin || (bat && bat.fecha_fin) || bIni;
+          if (rangosSeSolapan(pIni, pFin, bIni, bFin)) {
+            combatesPersona.push({ plana: p, participacion: pb, batalla: bat, via: 'plana' });
+          }
+        });
+    });
+
+  // Dedupe por batalla: si la persona aparece por varias vías para la misma
+  // batalla, nos quedamos con la más explícita (buque > escuadra > plana).
+  const prioridad = { 'buque': 0, 'escuadra': 1, 'plana': 2 };
+  const porBatalla = new Map();
+  combatesPersona.forEach(c => {
+    const k = c.participacion.id_batalla;
+    const existente = porBatalla.get(k);
+    if (!existente || prioridad[c.via] < prioridad[existente.via]) {
+      porBatalla.set(k, c);
+    }
+  });
+  const combatesUnicos = [...porBatalla.values()];
+
+  // Ordenar cronológicamente por la fecha de la batalla
+  combatesUnicos.sort((a, b) => {
+    const fa = (a.batalla && (a.batalla.fecha_inicio || a.batalla.fecha)) || '';
+    const fb = (b.batalla && (b.batalla.fecha_inicio || b.batalla.fecha)) || '';
+    return fa.localeCompare(fb);
+  });
+
+  if (combatesUnicos.length) {
+    html += `<h2>Combates <span class="badge" style="background:#e8c4c4;color:#7a2020">${combatesUnicos.length}</span></h2>`;
+    html += `<p style="color:#6a6a6a;font-size:13px">Acciones en las que el oficial participó como tripulante embarcado, jefe de escuadra o miembro de su plana mayor.</p>`;
+    html += `<table><thead><tr><th>Batalla</th><th>Fecha</th><th>Unidad</th><th>Función</th><th>Papel</th><th>Suerte</th></tr></thead><tbody>`;
+    combatesUnicos.forEach(c => {
+      const bat = c.batalla;
+      const pb = c.participacion;
+      const fechaBat = bat
+        ? formatRangoBatalla(bat.fecha_inicio || bat.fecha, bat.fecha_fin)
+        : formatRangoBatalla(pb.fecha_inicio || pb.fecha, pb.fecha_fin);
+      // La "unidad" y "función" dependen de la vía
+      let unidadHTML = '', funcionHTML = '';
+      if (c.via === 'buque') {
+        unidadHTML = linkBuque(pb.id_buque);
+        const fb = CAT.funcionBuque[c.destino.id_funcion_buque];
+        funcionHTML = fb ? esc(fb.nombre) : esc(c.destino.id_funcion_buque || '');
+      } else if (c.via === 'escuadra') {
+        unidadHTML = linkEscuadra(pb.id_escuadra);
+        const fn = CAT.funcion[c.mando.id_funcion];
+        funcionHTML = fn ? esc(fn.nombre) : 'al mando';
+      } else if (c.via === 'plana') {
+        unidadHTML = linkEscuadra(pb.id_escuadra);
+        const fn = CAT.funcion[c.plana.id_funcion];
+        funcionHTML = (fn ? esc(fn.nombre) : '') + ' <small style="color:#6a6a6a">(plana mayor)</small>';
+      }
+      html += `<tr>
+        <td>${linkBatalla(pb.id_batalla)}</td>
+        <td>${esc(fechaBat)}</td>
+        <td>${unidadHTML}</td>
+        <td>${funcionHTML}</td>
+        <td>${esc(pb.papel || '')}</td>
+        <td>${esc(pb.suerte || '')}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
   // Bajas en batalla documentadas (heridas, prisión, etc.) de esta persona
   const misBajas = D.bajas_batalla.filter(b => b.id_persona === id);
   if (misBajas.length) {
@@ -2435,9 +2631,15 @@ function renderBuque(id) {
       if (p.bajas_muertos) baj.push(`${p.bajas_muertos}M`);
       if (p.bajas_heridos) baj.push(`${p.bajas_heridos}H`);
       if (p.bajas_prisioneros) baj.push(`${p.bajas_prisioneros}P`);
+      // Mostrar el rango de la participación (no el de la batalla global)
+      const pIni = p.fecha_inicio || p.fecha;
+      const pFin = p.fecha_fin;
+      const fechaCelda = (pIni || pFin)
+        ? formatRangoBatalla(pIni, pFin)
+        : (bat ? formatRangoBatalla(bat.fecha_inicio || bat.fecha, bat.fecha_fin) : '');
       html += `<tr>
         <td>${linkBatalla(p.id_batalla)}</td>
-        <td>${bat && bat.fecha ? esc(fechaCorta(bat.fecha)) : (p.fecha ? esc(fechaCorta(p.fecha)) : '')}</td>
+        <td>${esc(fechaCelda)}</td>
         <td>${esc(p.papel || '')}</td>
         <td>${esc(p.suerte || '')}</td>
         <td>${baj.join(' · ')}</td>
@@ -4282,11 +4484,16 @@ function renderBatalla(id) {
   };
   const colR = colorResultado(bat.resultado);
 
+  // Rango efectivo: fecha_inicio (con fallback a fecha legacy) y fecha_fin
+  const fechaIniBat = bat.fecha_inicio || bat.fecha;
+  const fechaFinBat = bat.fecha_fin;
+  const rangoBatTexto = formatRangoBatalla(fechaIniBat, fechaFinBat);
+
   html += `<div class="detail-head">
     <span class="kind">Batalla · ${esc(bat.id)}</span>
     <h1>${esc(bat.nombre)}</h1>
     <div class="meta-row">
-      ${bat.fecha ? `<span><strong>${fechaCorta(bat.fecha)}</strong></span>` : ''}
+      ${rangoBatTexto ? `<span><strong>${rangoBatTexto}</strong></span>` : ''}
       ${bat.guerra ? `<span>${esc(bat.guerra)}</span>` : ''}
       ${bat.tipo ? `<span><strong>${esc(bat.tipo)}</strong></span>` : ''}
       ${bat.latitud != null ? `<span>${bat.latitud.toFixed(4)}, ${bat.longitud.toFixed(4)}</span>` : ''}
@@ -4313,7 +4520,7 @@ function renderBatalla(id) {
     html += `<div id="${mapId}" class="map-container"></div>`;
     pedirMapa(mapId, [{
       lat: bat.latitud, lon: bat.longitud,
-      popup: `<strong>${esc(bat.nombre)}</strong>${bat.fecha ? '<br>' + fechaCorta(bat.fecha) : ''}`,
+      popup: `<strong>${esc(bat.nombre)}</strong>${rangoBatTexto ? '<br>' + rangoBatTexto : ''}`,
       color: '#a32d2d', size: 10,
     }], { zoom: 6 });
   }
@@ -4329,13 +4536,49 @@ function renderBatalla(id) {
     Object.keys(porEsc).forEach(eid => {
       const e = CAT.escuadra[eid];
       h += `<h4 style="margin-top:14px;color:#1a4060">${e ? linkEscuadra(eid) : esc(eid)} <span class="badge">${porEsc[eid].length}</span></h4>`;
+
+      // ─── Mandos durante el rango de la batalla ───────────────────────
+      // (a) Jefes de la escuadra cuyo periodo de mando solapa con la batalla
+      const jefesEscuadra = D.mandos_escuadra
+        .filter(m => m.id_escuadra === eid)
+        .filter(m => rangosSeSolapan(
+          m.fecha_toma_mando || m.fecha_real_orden,
+          m.fecha_cese_efectiva || m.fecha_cese_real_orden || m.fecha_cese_orden,
+          fechaIniBat, fechaFinBat || fechaIniBat));
+      // (b) Divisiones de esta escuadra activas durante la batalla
+      const divisionesActivas = D.divisiones
+        .filter(d => d.id_escuadra === eid)
+        .filter(d => rangosSeSolapan(d.fecha_inicio, d.fecha_fin,
+                                     fechaIniBat, fechaFinBat || fechaIniBat));
+      const lineasMando = [];
+      if (jefesEscuadra.length) {
+        const lista = jefesEscuadra.map(m => {
+          const fn = CAT.funcion[m.id_funcion];
+          const cargo = fn ? fn.nombre : 'al mando';
+          return `${linkPersona(m.id_persona)} <small style="color:#6a6a6a">(${esc(cargo)})</small>`;
+        }).join(' · ');
+        lineasMando.push(`<strong>Mando:</strong> ${lista}`);
+      }
+      if (divisionesActivas.length) {
+        const lista = divisionesActivas.map(d => {
+          const jefe = d.id_jefe_division ? linkPersona(d.id_jefe_division) : '<span class="empty">jefe no documentado</span>';
+          return `<a href="#division/${esc(d.id)}">${esc(d.nombre)}</a> → ${jefe}`;
+        }).join('<br>');
+        lineasMando.push(`<strong>Divisiones:</strong><br>${lista}`);
+      }
+      if (lineasMando.length) {
+        h += `<div style="background:#f7f3e8;border-left:3px solid #c9a227;padding:6px 12px;margin:6px 0;font-size:13px;color:#3a3a3a">
+          ${lineasMando.join('<br>')}
+        </div>`;
+      }
+
       h += `<table><thead><tr><th>Buque</th><th>Tipo</th><th>Papel</th><th>Comandante</th><th>Suerte</th><th>Bajas</th></tr></thead><tbody>`;
       porEsc[eid].forEach(p => {
         const b = CAT.buque[p.id_buque];
         const com = D.destinos_mar.find(d => d.id_buque === p.id_buque &&
           d.id_funcion_buque === 'FBQ001' &&
           rangoCubre(d.fecha_toma_mando || d.fecha_real_orden,
-                     d.fecha_cese_efectiva || d.fecha_cese_orden || d.fecha_cese_implicita, bat.fecha));
+                     d.fecha_cese_efectiva || d.fecha_cese_orden || d.fecha_cese_implicita, fechaIniBat));
         // Bajas resumidas
         const baj = [];
         if (p.bajas_muertos) baj.push(`${p.bajas_muertos}M`);
@@ -4355,6 +4598,17 @@ function renderBatalla(id) {
           <td>${suerteHTML}</td>
           <td>${baj.length ? baj.join(' · ') : ''}</td>
         </tr>`;
+        // Subfila con el rango propio de la participación si difiere del de
+        // la batalla global (un buque puede haber participado solo en una
+        // parte del bombardeo prolongado, por ejemplo).
+        const pIni = p.fecha_inicio || p.fecha;
+        const pFin = p.fecha_fin;
+        const rangoBatProp = `${fechaIniBat || ''}|${fechaFinBat || ''}`;
+        const rangoParProp = `${pIni || ''}|${pFin || ''}`;
+        if (rangoParProp !== rangoBatProp && (pIni || pFin)) {
+          const rTexto = formatRangoBatalla(pIni, pFin);
+          h += `<tr><td colspan="6" style="font-size:12px;color:#5a5a5a;background:#fafafa">📅 Participó: ${rTexto}</td></tr>`;
+        }
         if (p.observaciones) {
           h += `<tr><td colspan="6" style="font-size:12px;color:#5a5a5a;font-style:italic;background:#fafafa">${esc(p.observaciones)}</td></tr>`;
         }
@@ -4439,7 +4693,12 @@ function renderMapaGlobal() {
       mostrarLugares: true,
       mostrarPosiciones: true,
       mostrarRutas: true,
+      mostrarBatallas: true,
     };
+  }
+  // Compatibilidad: si una sesión vieja no tenía el flag, lo añadimos
+  if (window.__mapaFiltros.mostrarBatallas === undefined) {
+    window.__mapaFiltros.mostrarBatallas = true;
   }
   const F = window.__mapaFiltros;
 
@@ -4467,6 +4726,7 @@ function renderMapaGlobal() {
         <label style="display:block;font-size:14px"><input type="checkbox" id="f-lugares" ${F.mostrarLugares?'checked':''}> Lugares</label>
         <label style="display:block;font-size:14px"><input type="checkbox" id="f-rutas" ${F.mostrarRutas?'checked':''}> Líneas de ruta</label>
         <label style="display:block;font-size:14px"><input type="checkbox" id="f-posiciones" ${F.mostrarPosiciones?'checked':''}> Posiciones diarias</label>
+        <label style="display:block;font-size:14px"><input type="checkbox" id="f-batallas" ${F.mostrarBatallas?'checked':''}> Batallas</label>
       </div>
       <div>
         <div style="font-size:12px;color:#5a4f36;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px">Escuadra</div>
@@ -4548,6 +4808,38 @@ function renderMapaGlobal() {
         color: '#1e3a5f', size: 9,
       });
     });
+  }
+
+  // Batallas: se pintan como puntos rojos distintivos. Si una batalla cae
+  // sobre las coordenadas de un puerto cercano (Trafalgar↔Cádiz, por ejemplo)
+  // el clic en este marcador prevalece porque se añade DESPUÉS de los lugares
+  // y queda visualmente encima. El popup enlaza directamente a la ficha de
+  // la batalla, no a la del lugar próximo.
+  if (F.mostrarBatallas) {
+    // Una batalla aparece si cualquier día de su rango cae dentro del filtro:
+    // si la batalla va del 1 al 9 ago 1783, debe aparecer aunque el filtro
+    // sea "agosto 1783" pero también "primeros 5 días de agosto 1783".
+    function batallaEnFiltroFechas(b) {
+      const ini = b.fecha_inicio || b.fecha;
+      const fin = b.fecha_fin || ini;
+      if (!ini && !fin) return true;
+      // ¿solapan [ini..fin] y [F.fechaIni..F.fechaFin]?
+      if (F.fechaIni && fin && fin < F.fechaIni) return false;
+      if (F.fechaFin && ini && ini > F.fechaFin) return false;
+      return true;
+    }
+    D.batallas.filter(b => b.latitud != null && b.longitud != null)
+      .filter(batallaEnFiltroFechas)
+      .forEach(b => {
+        const rangoTxt = formatRangoBatalla(b.fecha_inicio || b.fecha, b.fecha_fin);
+        puntos.push({
+          lat: b.latitud, lon: b.longitud,
+          popup: `<strong>⚔️ <a href="#batalla/${esc(b.id)}">${esc(b.nombre)}</a></strong>` +
+                 (rangoTxt ? `<br><small>${esc(rangoTxt)}</small>` : '') +
+                 (b.resultado ? `<br><small>${esc(b.resultado)}</small>` : ''),
+          color: '#a32d2d', size: 11,
+        });
+      });
   }
 
   // Rutas como líneas. Cada modo decide qué rutas dibujar y por qué puntos
@@ -4738,6 +5030,7 @@ function renderMapaGlobal() {
       F.mostrarLugares = document.getElementById('f-lugares')?.checked ?? true;
       F.mostrarPosiciones = document.getElementById('f-posiciones')?.checked ?? true;
       F.mostrarRutas = document.getElementById('f-rutas')?.checked ?? true;
+      F.mostrarBatallas = document.getElementById('f-batallas')?.checked ?? true;
       F.fechaIni = document.getElementById('f-desde')?.value || '';
       F.fechaFin = document.getElementById('f-hasta')?.value || '';
       F.escuadra = document.getElementById('f-escuadra')?.value || '';
