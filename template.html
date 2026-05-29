@@ -1522,17 +1522,44 @@ function renderListado(tipo) {
   }
   else if (tipo === 'grados') {
     html += `<h1>Escalafón (${D.grados.length})</h1>`;
-    html += `<table><thead><tr><th>Orden</th><th>ID</th><th>Grado</th><th>Rama</th><th>Notas</th></tr></thead><tbody>`;
+    // Agrupar por nación: la Armada española primero (los sin id_nacion o
+    // con NACI00001), luego cada bandera extranjera en su propio bloque.
+    const porNacion = {};
     D.grados.forEach(g => {
-      html += `<tr>
-        <td>${g.orden || ''}</td>
-        <td><code>${esc(g.id)}</code></td>
-        <td><a href="#grado/${esc(g.id)}">${esc(g.nombre)}</a></td>
-        <td>${esc(g.rama || '')}</td>
-        <td><small>${esc(g.notas || '')}</small></td>
-      </tr>`;
+      const k = (!g.id_nacion || g.id_nacion === 'NACI00001') ? 'NACI00001' : g.id_nacion;
+      (porNacion[k] = porNacion[k] || []).push(g);
     });
-    html += `</tbody></table>`;
+    // Render: España primero, luego el resto ordenado alfabéticamente
+    const naciones = Object.keys(porNacion).sort((a, b) => {
+      if (a === 'NACI00001') return -1;
+      if (b === 'NACI00001') return 1;
+      const na = (CAT.nacion[a] && CAT.nacion[a].nombre) || a;
+      const nb = (CAT.nacion[b] && CAT.nacion[b].nombre) || b;
+      return na.localeCompare(nb);
+    });
+    naciones.forEach(nid => {
+      const lista = porNacion[nid].slice().sort((a, b) => {
+        const oa = parseInt(a.orden, 10) || 99; const ob = parseInt(b.orden, 10) || 99;
+        return oa - ob;
+      });
+      const nombre = (CAT.nacion[nid] && CAT.nacion[nid].nombre) || 'España';
+      const color = colorNacion(nid);
+      html += `<h2 style="color:${color};border-bottom:2px solid ${color};padding-bottom:4px;margin-top:24px">
+        ${badgeNacion(nid)} <span style="color:#3a3a3a">${esc(nombre)}</span>
+        <span class="badge">${lista.length}</span>
+      </h2>`;
+      html += `<table><thead><tr><th>Orden</th><th>ID</th><th>Grado</th><th>Rama</th><th>Notas</th></tr></thead><tbody>`;
+      lista.forEach(g => {
+        html += `<tr>
+          <td>${g.orden || ''}</td>
+          <td><code>${esc(g.id)}</code></td>
+          <td><a href="#grado/${esc(g.id)}">${esc(g.nombre)}</a></td>
+          <td>${esc(g.rama || '')}</td>
+          <td><small>${esc(g.notas || '')}</small></td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+    });
   }
   else if (tipo === 'funcionesBuque') {
     html += `<h1>Funciones a bordo (${D.funciones_buque.length})</h1>`;
@@ -2943,10 +2970,11 @@ function renderGrado(id) {
     <a href="#listado/grados">Escalafón</a> › ${esc(g.nombre)}</p>`;
   html += `<div class="detail-head">
     <span class="kind">Grado · ${esc(g.id)}</span>
-    <h1>${esc(g.nombre)}</h1>
+    <h1>${esc(g.nombre)}${g.id_nacion && g.id_nacion !== 'NACI00001' ? ' ' + badgeNacion(g.id_nacion) : ''}</h1>
     <div class="meta-row">
       ${g.orden ? `<span>Orden: <strong>${g.orden}</strong></span>` : ''}
       ${g.rama ? `<span>Rama: ${esc(g.rama)}</span>` : ''}
+      ${g.id_nacion && g.id_nacion !== 'NACI00001' ? `<span>Nación: <strong>${linkNacion(g.id_nacion)}</strong></span>` : ''}
       ${g.notas ? `<span><small>${esc(g.notas)}</small></span>` : ''}
     </div>
   </div>`;

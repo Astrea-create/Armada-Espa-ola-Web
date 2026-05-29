@@ -600,11 +600,12 @@ def extraer(directorio: Path) -> Dict[str, List[Dict]]:
 
     # ── GRADOS Y CATÁLOGOS DE PERSONAL ─────────────────────────────────────
     D["grados"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Grado"), {
-        "id":      ("id_grado",     limpia),
-        "nombre":  ("nombre_grado", limpia),
-        "orden":   ("orden",        limpia),
-        "rama":    ("rama",         limpia),
-        "notas":   ("notas",        limpia),
+        "id":         ("id_grado",     limpia),
+        "nombre":     ("nombre_grado", limpia),
+        "orden":      ("orden",        limpia),
+        "id_nacion":  ("id_nacion",    limpia),
+        "rama":       ("rama",         limpia),
+        "notas":      ("notas",        limpia),
     })
 
     D["funciones"] = filas(hoja(xl_gra, "GRADO_CLAUDE.xlsx", "Funcion"), {
